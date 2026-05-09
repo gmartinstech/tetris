@@ -203,6 +203,17 @@ public class TetrisServer {
                 .animate-shimmer { animation: shimmer-gold 1.1s ease-in-out infinite; }
                 @keyframes bomb-pulse { 0%,100% { filter: brightness(0.85) saturate(1.2); } 50% { filter: brightness(1.6) saturate(2) contrast(1.3); } }
                 .animate-bomb-pulse { animation: bomb-pulse 0.65s ease-in-out infinite; }
+                @keyframes line-burst { 0% { transform: scale(1); filter: brightness(1); opacity: 1; } 20% { transform: scale(1.2); filter: brightness(3) contrast(2); opacity: 1; box-shadow: 0 0 40px rgba(255,255,255,0.9); } 50% { transform: scale(1.1); filter: brightness(2.5) contrast(1.8); opacity: 0.8; } 100% { transform: scale(0.3); filter: brightness(4) blur(12px); opacity: 0; border-radius: 50%; } }
+                .animate-line-burst { animation: line-burst 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+                @keyframes board-shake { 0%,100% { transform: translateX(0); } 15% { transform: translateX(-3px) translateY(2px); } 30% { transform: translateX(3px) translateY(-1px); } 45% { transform: translateX(-2px) translateY(1px); } 60% { transform: translateX(2px) translateY(-2px); } 75% { transform: translateX(-1px); } }
+                .animate-board-shake { animation: board-shake 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+                @media (prefers-reduced-motion: reduce) {
+                    .animate-popIn, .animate-dissolve, .animate-floatUp, .animate-shimmer, .animate-bomb-pulse, .animate-line-burst, .animate-board-shake {
+                        animation-duration: 0.01ms !important;
+                        animation-iteration-count: 1 !important;
+                        transition-duration: 0.01ms !important;
+                    }
+                }
             </style>
         </head>
         <body>
@@ -227,20 +238,22 @@ public class TetrisServer {
 
                 const vibrate = (pattern) => { if (navigator.vibrate) try { navigator.vibrate(pattern); } catch (e) {} };
 
-                const Block = ({ cellData, isDissolving, noAnim, extraClass = '' }) => {
+                const Block = ({ cellData, isDissolving, noAnim, extraClass = '', staggerDelay = 0, burst = false }) => {
                     if (!cellData) return <div className={`w-full h-full rounded-[4px] bg-white/5 border border-white/5 ${extraClass}`} />;
                     const type = typeof cellData === 'object' ? cellData.type : null;
-                    const animClass = isDissolving ? 'animate-dissolve' : (noAnim ? '' : 'animate-popIn');
+                    let animClass = noAnim ? '' : 'animate-popIn';
+                    if (isDissolving) animClass = burst ? 'animate-line-burst' : 'animate-dissolve';
+                    const style = staggerDelay > 0 ? { animationDelay: `${staggerDelay}ms` } : {};
                     if (type === 'filler') return (
                         <div className={`w-full h-full rounded-[4px] animate-shimmer ${animClass} ${extraClass}`}
-                            style={{ background: 'linear-gradient(135deg,#ffe066,#ffb347,#ff80bf,#a78bfa,#67e8f9,#ffe066)', backgroundSize: '300% 300%', boxShadow: 'inset 2px 2px 4px rgba(255,255,200,0.7), inset -2px -2px 5px rgba(120,60,0,0.5)' }} />
+                            style={{ background: 'linear-gradient(135deg,#ffe066,#ffb347,#ff80bf,#a78bfa,#67e8f9,#ffe066)', backgroundSize: '300% 300%', boxShadow: 'inset 2px 2px 4px rgba(255,255,200,0.7), inset -2px -2px 5px rgba(120,60,0,0.5)', ...style }} />
                     );
                     if (type === 'explosive') return (
                         <div className={`w-full h-full rounded-[4px] animate-bomb-pulse ${animClass} ${extraClass}`}
-                            style={{ background: 'radial-gradient(circle at 42% 38%, #ff6a00 0%, #c0200a 45%, #1a0000 100%)', boxShadow: 'inset 1px 1px 4px rgba(255,160,0,0.6), inset -1px -1px 5px rgba(0,0,0,0.9)' }} />
+                            style={{ background: 'radial-gradient(circle at 42% 38%, #ff6a00 0%, #c0200a 45%, #1a0000 100%)', boxShadow: 'inset 1px 1px 4px rgba(255,160,0,0.6), inset -1px -1px 5px rgba(0,0,0,0.9)', ...style }} />
                     );
                     const colorClass = typeof cellData === 'string' ? cellData : cellData.color;
-                    return <div className={`w-full h-full bg-gradient-to-br ${colorClass} block-texture ${animClass} relative rounded-[4px] overflow-hidden ${extraClass}`} />;
+                    return <div className={`w-full h-full bg-gradient-to-br ${colorClass} block-texture ${animClass} relative rounded-[4px] overflow-hidden ${extraClass}`} style={style} />;
                 };
 
                 const PIECE_LIBRARY = [
@@ -436,6 +449,7 @@ public class TetrisServer {
                     const [activeStage, setActiveStage] = useState(null);
                     const [stagePieceCount, setStagePieceCount] = useState(0);
                     const [stageResult, setStageResult] = useState(null); // null|'won'|'lost'
+                    const [boardShake, setBoardShake] = useState(false);
                     const [soloHighScore, setSoloHighScore] = useState(() => parseInt(localStorage.getItem('tetris_solo_hs') || '0'));
                     const [soloDifficulty, setSoloDifficulty] = useState(() => localStorage.getItem('tetris_solo_diff') || 'normal');
                     useEffect(() => { localStorage.setItem('tetris_solo_diff', soloDifficulty); }, [soloDifficulty]);
@@ -697,7 +711,12 @@ public class TetrisServer {
                                 setFloatingTexts(prev => [...prev, { id, text: `+${comboScore}`, x: dragData.clientX, y: dragData.clientY - 50 }]);
                                 setTimeout(() => setFloatingTexts(prev => prev.filter(ft => ft.id !== id)), 1500);
                             }
-                            vibrate([100, 50, 100]);
+                            // Scaled vibration: more lines = stronger rumble
+                            if (totalLinesCleared === 1) vibrate([60, 30, 60]);
+                            else if (totalLinesCleared === 2) vibrate([80, 40, 80, 40, 80]);
+                            else if (totalLinesCleared === 3) vibrate([100, 50, 100, 50, 100, 50, 100]);
+                            else vibrate([120, 60, 120, 60, 120, 60, 120, 60, 120, 60, 120]); // 4+ celebration
+                            if (totalLinesCleared >= 2) { setBoardShake(true); setTimeout(() => setBoardShake(false), 350); }
                         }
 
                         let newLines = gameState.lines + totalLinesCleared;
@@ -941,11 +960,15 @@ public class TetrisServer {
                             </div>
 
                             <div className="flex-1 flex flex-col items-center justify-center pt-24 pb-6 px-2 z-10 w-full max-w-4xl mx-auto h-full">
-                                <div ref={gridRef} className="grid gap-[2px] p-2 bg-gray-900/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] select-none touch-none border border-gray-700/60 mb-auto mt-auto" style={{ gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))` }}>
+                                <div ref={gridRef} className={`grid gap-[2px] p-2 bg-gray-900/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] select-none touch-none border border-gray-700/60 mb-auto mt-auto ${boardShake ? 'animate-board-shake' : ''}`} style={{ gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))` }}>
                                     {gameState.board.map((cellValue, index) => {
                                         const x = index % BOARD_SIZE; const y = Math.floor(index / BOARD_SIZE);
-                                        const isDissolving = gameState.clearingLines?.rows?.includes(y) || gameState.clearingLines?.cols?.includes(x) || gameState.explosionArea?.some(c => c.x === x && c.y === y);
-                                        return <div key={index} className="relative w-[8.5vw] h-[8.5vw] max-w-[42px] max-h-[42px] sm:max-w-[50px] sm:max-h-[50px] p-[1px]"><Block cellData={cellValue !== 0 ? cellValue : null} isDissolving={isDissolving} /></div>;
+                                        const inClearingRow = gameState.clearingLines?.rows?.includes(y);
+                                        const inClearingCol = gameState.clearingLines?.cols?.includes(x);
+                                        const inExplosion = gameState.explosionArea?.some(c => c.x === x && c.y === y);
+                                        const isDissolving = inClearingRow || inClearingCol || inExplosion;
+                                        const staggerDelay = inClearingRow ? x * 35 : (inClearingCol ? y * 35 : 0);
+                                        return <div key={index} className="relative w-[8.5vw] h-[8.5vw] max-w-[42px] max-h-[42px] sm:max-w-[50px] sm:max-h-[50px] p-[1px]"><Block cellData={cellValue !== 0 ? cellValue : null} isDissolving={isDissolving} staggerDelay={staggerDelay} burst={inClearingRow || inClearingCol} /></div>;
                                     })}
                                 </div>
 
