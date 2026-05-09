@@ -416,6 +416,14 @@ public class TetrisServer {
                         return id;
                     });
                     
+                    const [appVersion, setAppVersion] = useState('');
+                    useEffect(() => {
+                        fetch('/version')
+                            .then(r => r.json())
+                            .then(data => setAppVersion(data.version || ''))
+                            .catch(() => {});
+                    }, []);
+                    
                     const [mode, setMode] = useState(() => localStorage.getItem('tetris_mode') || 'menu'); // menu|coop|solo|career-map|career-stage
                     const [gameState, setGameState] = useState(null);
                     const [playerRole, setPlayerRole] = useState(null);
@@ -856,6 +864,7 @@ public class TetrisServer {
                                         </button>
                                     </div>
                                 </div>
+                                <div className="mt-4 text-[10px] text-gray-600 font-mono text-right w-full max-w-sm">{appVersion}</div>
                             </div>
                         );
                     }
