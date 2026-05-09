@@ -134,6 +134,22 @@ public class TetrisServer {
             exchange.sendResponseHeaders(405, -1);
         });
 
+        // 5. Version endpoint
+        server.createContext("/version", exchange -> {
+            String version = "unknown";
+            try {
+                version = Files.readString(Path.of("version.txt")).trim();
+            } catch (Exception ignored) {}
+            String json = "{\"version\":\"" + version + "\"}";
+            byte[] response = json.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+            exchange.sendResponseHeaders(200, response.length);
+            try (var os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        });
+
         // Delega a concorrência para as Virtual Threads (Project Loom)
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
