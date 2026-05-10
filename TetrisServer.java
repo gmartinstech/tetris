@@ -48,6 +48,117 @@ public class TetrisServer {
         }
     }
 
+    private static void handleEvents(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+        exchange.getResponseHeaders().set("Cache-Control", "no-cache");
+        exchange.getResponseHeaders().set("Connection", "keep-alive");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        exchange.sendResponseHeaders(200, 0);
+
+        OutputStream os = exchange.getResponseBody();
+        sseClients.add(os);
+
+        try {
+            if (globalGameState != null) {
+                os.write(("data: " + globalGameState + "\n\n").getBytes(StandardCharsets.UTF_8));
+                os.flush();
+            }
+            while (!Thread.currentThread().isInterrupted()) {
+                Thread.sleep(15000);
+                os.write(":\n\n".getBytes(StandardCharsets.UTF_8));
+                os.flush();
+            }
+        } catch (Exception e) {
+            // Client disconnected
+        } finally {
+            sseClients.remove(os);
+            try { os.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    private static void handleAction(HttpExchange exchange) throws IOException {
+        if ("OPTIONS".equals(exchange.getRequestMethod())) {
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "POST, OPTIONS");
+            exchange.sendResponseHeaders(204, -1);
+            return;
+        }
+
+        if ("POST".equals(exchange.getRequestMethod())) {
+            try (InputStream is = exchange.getRequestBody()) {
+                globalGameState = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                persistState(globalGameState);
+                broadcast(globalGameState);
+            }
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+            exchange.sendResponseHeaders(200, -1);
+        } else {
+            exchange.sendResponseHeaders(405, -1);
+        }
+    }
+
+    private static void handleCareer(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        String method = exchange.getRequestMethod();
+
+        if ("OPTIONS".equals(method)) {
+            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+            exchange.sendResponseHeaders(204, -1);
+            return;
+        }
+
+        String path = exchange.getRequestURI().getPath();
+        String uid = path.substring("/career/".length());
+        if (!uid.matches("^[a-zA-Z0-9_-]{1,64}$")) {
+            exchange.sendResponseHeaders(400, -1);
+            return;
+        }
+
+        Path file = Path.of("career_" + uid + ".json");
+        if ("GET".equals(method)) {
+            if (Files.exists(file)) {
+                byte[] data = Files.readAllBytes(file);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, data.length);
+                try (var os = exchange.getResponseBody()) { os.write(data); }
+            } else {
+                exchange.sendResponseHeaders(404, -1);
+            }
+            return;
+        }
+
+        if ("POST".equals(method)) {
+            try (InputStream is = exchange.getRequestBody()) {
+                byte[] body = is.readAllBytes();
+                if (body.length > 100_000) {
+                    exchange.sendResponseHeaders(413, -1);
+                    return;
+                }
+                Files.write(file, body, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            }
+            exchange.sendResponseHeaders(200, -1);
+            return;
+        }
+
+        exchange.sendResponseHeaders(405, -1);
+    }
+
+    private static void handleVersion(HttpExchange exchange) throws IOException {
+        String version = "unknown";
+        try {
+            version = Files.readString(Path.of("version.txt")).trim();
+        } catch (Exception ignored) {}
+        String json = "{\"version\":\"" + version + "\"}";
+        byte[] response = json.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        exchange.sendResponseHeaders(200, response.length);
+        try (var os = exchange.getResponseBody()) {
+            os.write(response);
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         if (Files.exists(STATE_FILE)) {
             try { globalGameState = Files.readString(STATE_FILE); } catch (Exception ignored) {}
@@ -65,116 +176,13 @@ public class TetrisServer {
             }
         });
 
-        // 2. Rota SSE (Server-Sent Events) para Push em tempo real (Substitui WebSocket)
-        server.createContext("/events", exchange -> {
-            exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
-            exchange.getResponseHeaders().set("Cache-Control", "no-cache");
-            exchange.getResponseHeaders().set("Connection", "keep-alive");
-            // Adiciona CORS para garantir acesso na rede local
-            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-            exchange.sendResponseHeaders(200, 0); 
-            
-            OutputStream os = exchange.getResponseBody();
-            sseClients.add(os);
-            
-            try {
-                // Sincroniza o cliente recém-conectado com o estado atual
-                if (globalGameState != null) {
-                    os.write(("data: " + globalGameState + "\n\n").getBytes(StandardCharsets.UTF_8));
-                    os.flush();
-                }
-                // Loop que mantém a thread suspensa (Virtual Threads lidam com isso de graça)
-                while (!Thread.currentThread().isInterrupted()) {
-                    Thread.sleep(15000);
-                    os.write(":\n\n".getBytes(StandardCharsets.UTF_8)); // Ping para evitar timeout
-                    os.flush();
-                }
-            } catch (Exception e) {
-                // Cliente desconectou (fechou aba/celular bloqueou)
-            } finally {
-                sseClients.remove(os);
-                os.close();
-            }
-        });
+        server.createContext("/events", TetrisServer::handleEvents);
 
-        // 3. Rota POST para receber jogadas dos clientes
-        server.createContext("/action", exchange -> {
-            // CORS Preflight
-            if ("OPTIONS".equals(exchange.getRequestMethod())) {
-                exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-                exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "POST, OPTIONS");
-                exchange.sendResponseHeaders(204, -1);
-                return;
-            }
+        server.createContext("/action", TetrisServer::handleAction);
 
-            if ("POST".equals(exchange.getRequestMethod())) {
-                try (InputStream is = exchange.getRequestBody()) {
-                    globalGameState = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                    persistState(globalGameState);
-                    broadcast(globalGameState);
-                }
-                exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-                exchange.sendResponseHeaders(200, -1);
-            } else {
-                exchange.sendResponseHeaders(405, -1);
-            }
-        });
+        server.createContext("/career/", TetrisServer::handleCareer);
 
-        // 4. Career save/load per uid
-        server.createContext("/career/", exchange -> {
-            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-            String method = exchange.getRequestMethod();
-            if ("OPTIONS".equals(method)) {
-                exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-                exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
-                exchange.sendResponseHeaders(204, -1);
-                return;
-            }
-            String path = exchange.getRequestURI().getPath();
-            String uid = path.substring("/career/".length());
-            if (!uid.matches("^[a-zA-Z0-9_-]{1,64}$")) {
-                exchange.sendResponseHeaders(400, -1);
-                return;
-            }
-            Path file = Path.of("career_" + uid + ".json");
-            if ("GET".equals(method)) {
-                if (Files.exists(file)) {
-                    byte[] data = Files.readAllBytes(file);
-                    exchange.getResponseHeaders().set("Content-Type", "application/json");
-                    exchange.sendResponseHeaders(200, data.length);
-                    try (var os = exchange.getResponseBody()) { os.write(data); }
-                } else {
-                    exchange.sendResponseHeaders(404, -1);
-                }
-                return;
-            }
-            if ("POST".equals(method)) {
-                try (InputStream is = exchange.getRequestBody()) {
-                    byte[] body = is.readAllBytes();
-                    if (body.length > 100_000) { exchange.sendResponseHeaders(413, -1); return; }
-                    Files.write(file, body, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-                }
-                exchange.sendResponseHeaders(200, -1);
-                return;
-            }
-            exchange.sendResponseHeaders(405, -1);
-        });
-
-        // 5. Version endpoint
-        server.createContext("/version", exchange -> {
-            String version = "unknown";
-            try {
-                version = Files.readString(Path.of("version.txt")).trim();
-            } catch (Exception ignored) {}
-            String json = "{\"version\":\"" + version + "\"}";
-            byte[] response = json.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-            exchange.sendResponseHeaders(200, response.length);
-            try (var os = exchange.getResponseBody()) {
-                os.write(response);
-            }
-        });
+        server.createContext("/version", TetrisServer::handleVersion);
 
         // Delega a concorrência para as Virtual Threads (Project Loom)
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
