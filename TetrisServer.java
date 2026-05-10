@@ -36,10 +36,15 @@ public class TetrisServer {
         void touch() { lastActivity.set(System.currentTimeMillis()); }
     }
 
-    private static Path roomFile(String slug) { return Path.of("room_" + slug + ".json"); }
+    private static final Path SESSIONS_DIR = Path.of("sessions");
+    private static final Path ROOMS_DIR = SESSIONS_DIR.resolve("rooms");
+    private static final Path CAREERS_DIR = SESSIONS_DIR.resolve("careers");
+    private static Path roomFile(String slug) { return ROOMS_DIR.resolve(slug + ".json"); }
+    private static Path careerFile(String uid) { return CAREERS_DIR.resolve(uid + ".json"); }
 
     private static void persistRoom(String slug, String state) {
         try {
+            Files.createDirectories(ROOMS_DIR);
             Files.writeString(roomFile(slug), state,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception ignored) {}
@@ -100,6 +105,12 @@ public class TetrisServer {
         }
     }
 
+    private static String etagFor(byte[] data) {
+        long h = 1469598103934665603L;
+        for (byte b : data) { h ^= b & 0xff; h *= 1099511628211L; }
+        return "\"" + Long.toHexString(h) + "\"";
+    }
+
     private static void serveStatic(HttpExchange exchange, String filename, String contentType) throws IOException {
         String content = readStaticFile(filename);
         if (content == null) {
@@ -107,6 +118,14 @@ public class TetrisServer {
             return;
         }
         byte[] response = content.getBytes(StandardCharsets.UTF_8);
+        String etag = etagFor(response);
+        String inm = exchange.getRequestHeaders().getFirst("If-None-Match");
+        exchange.getResponseHeaders().set("Cache-Control", "no-cache, must-revalidate");
+        exchange.getResponseHeaders().set("ETag", etag);
+        if (etag.equals(inm)) {
+            exchange.sendResponseHeaders(304, -1);
+            return;
+        }
         exchange.getResponseHeaders().set("Content-Type", contentType);
         exchange.sendResponseHeaders(200, response.length);
         try (var os = exchange.getResponseBody()) {
@@ -114,12 +133,28 @@ public class TetrisServer {
         }
     }
 
+    private static String currentVersion() {
+        try { return Files.readString(Path.of("version.txt")).trim().replaceAll("[^a-zA-Z0-9._-]", ""); }
+        catch (Exception e) { return "dev"; }
+    }
+
     private static void handleRoot(HttpExchange exchange) throws IOException {
         String html = readStaticFile("index.html");
         if (html == null) {
             html = HTML_CONTENT;
         }
+        String v = currentVersion();
+        html = html.replace("src=\"app.js\"", "src=\"app.js?v=" + v + "\"")
+                   .replace("href=\"style.css\"", "href=\"style.css?v=" + v + "\"");
         byte[] response = html.getBytes(StandardCharsets.UTF_8);
+        String etag = etagFor(response);
+        String inm = exchange.getRequestHeaders().getFirst("If-None-Match");
+        exchange.getResponseHeaders().set("Cache-Control", "no-cache, must-revalidate");
+        exchange.getResponseHeaders().set("ETag", etag);
+        if (etag.equals(inm)) {
+            exchange.sendResponseHeaders(304, -1);
+            return;
+        }
         exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
         exchange.sendResponseHeaders(200, response.length);
         try (var os = exchange.getResponseBody()) {
@@ -296,14 +331,67 @@ public class TetrisServer {
         }
     }
 
-    private static void loadRoomsFromDisk() {
+    private static void migrateLegacyRoomFiles() {
+        try {
+            Files.createDirectories(ROOMS_DIR);
+            Files.createDirectories(CAREERS_DIR);
+        } catch (Exception ignored) {}
+        // 1) Old layout: ./room_<slug>.json -> ./sessions/rooms/<slug>.json
         try (Stream<Path> paths = Files.list(Path.of("."))) {
             paths.filter(p -> {
                 String n = p.getFileName().toString();
-                return n.startsWith("room_") && n.endsWith(".json");
+                return n.startsWith("room_") && n.endsWith(".json") && Files.isRegularFile(p);
             }).forEach(p -> {
                 String name = p.getFileName().toString();
                 String slug = name.substring(5, name.length() - 5);
+                if (!SLUG_RE.matcher(slug).matches()) return;
+                Path target = roomFile(slug);
+                try {
+                    if (!Files.exists(target)) Files.move(p, target);
+                    else Files.deleteIfExists(p);
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
+        // 2) Intermediate layout: ./rooms/<slug>.json -> ./sessions/rooms/<slug>.json
+        Path oldRoomsDir = Path.of("rooms");
+        if (Files.isDirectory(oldRoomsDir)) {
+            try (Stream<Path> paths = Files.list(oldRoomsDir)) {
+                paths.filter(p -> p.getFileName().toString().endsWith(".json")).forEach(p -> {
+                    Path target = ROOMS_DIR.resolve(p.getFileName());
+                    try {
+                        if (!Files.exists(target)) Files.move(p, target);
+                        else Files.deleteIfExists(p);
+                    } catch (Exception ignored) {}
+                });
+            } catch (Exception ignored) {}
+            try { Files.deleteIfExists(oldRoomsDir); } catch (Exception ignored) {}
+        }
+        // 3) Old career layout: ./career_<uid>.json -> ./sessions/careers/<uid>.json
+        try (Stream<Path> paths = Files.list(Path.of("."))) {
+            paths.filter(p -> {
+                String n = p.getFileName().toString();
+                return n.startsWith("career_") && n.endsWith(".json") && Files.isRegularFile(p);
+            }).forEach(p -> {
+                String name = p.getFileName().toString();
+                String uid = name.substring(7, name.length() - 5);
+                if (!uid.matches("^[a-zA-Z0-9_-]{1,64}$")) return;
+                Path target = careerFile(uid);
+                try {
+                    if (!Files.exists(target)) Files.move(p, target);
+                    else Files.deleteIfExists(p);
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
+    }
+
+    private static void loadRoomsFromDisk() {
+        try {
+            Files.createDirectories(ROOMS_DIR);
+        } catch (Exception ignored) {}
+        try (Stream<Path> paths = Files.list(ROOMS_DIR)) {
+            paths.filter(p -> p.getFileName().toString().endsWith(".json")).forEach(p -> {
+                String name = p.getFileName().toString();
+                String slug = name.substring(0, name.length() - 5);
                 if (!SLUG_RE.matcher(slug).matches()) return;
                 try {
                     String state = Files.readString(p);
@@ -321,6 +409,7 @@ public class TetrisServer {
         String slug = "gabriel-ana";
         Path target = roomFile(slug);
         try {
+            Files.createDirectories(ROOMS_DIR);
             if (!Files.exists(target)) {
                 Files.copy(legacy, target);
             }
@@ -350,7 +439,8 @@ public class TetrisServer {
             return;
         }
 
-        Path file = Path.of("career_" + uid + ".json");
+        try { Files.createDirectories(CAREERS_DIR); } catch (Exception ignored) {}
+        Path file = careerFile(uid);
         if ("GET".equals(method)) {
             if (Files.exists(file)) {
                 byte[] data = Files.readAllBytes(file);
@@ -395,6 +485,7 @@ public class TetrisServer {
     }
 
     public static void main(String[] args) throws Exception {
+        migrateLegacyRoomFiles();
         loadRoomsFromDisk();
         migrateLegacyState();
 

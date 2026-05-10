@@ -2,5 +2,8 @@
 gamestate.json
 career_*.json
 room_*.json
+rooms/
+sessions/
 .worktrees/
+.playwright-mcp/
 *.class

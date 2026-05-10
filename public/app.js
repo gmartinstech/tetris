@@ -237,10 +237,22 @@ function App() {
     
     const [appVersion, setAppVersion] = useState('');
     useEffect(() => {
-        fetch('/version')
-            .then(r => r.json())
-            .then(data => setAppVersion(data.version || ''))
-            .catch(() => {});
+        let initial = null;
+        const check = () => {
+            fetch('version', { cache: 'no-store' })
+                .then(r => r.json())
+                .then(data => {
+                    const v = data.version || '';
+                    if (initial === null) { initial = v; setAppVersion(v); return; }
+                    if (v && v !== initial) {
+                        try { window.location.reload(); } catch (e) {}
+                    }
+                })
+                .catch(() => {});
+        };
+        check();
+        const id = setInterval(check, 60000);
+        return () => clearInterval(id);
     }, []);
     
     const [mode, setMode] = useState(() => localStorage.getItem('tetris_mode') || 'menu'); // menu|coop|solo|career-map|career-stage
