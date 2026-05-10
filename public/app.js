@@ -1,15 +1,8 @@
 const { useState, useEffect, useRef, useCallback } = React;
 
 const BOARD_SIZE = 10;
-// Harmonized jewel palette — all Tailwind 400→600 stops at matching saturation
-const PIECE_STYLES = [
-    'from-rose-400 to-rose-600',
-    'from-amber-400 to-amber-600',
-    'from-emerald-400 to-emerald-600',
-    'from-sky-400 to-sky-600',
-    'from-violet-400 to-violet-600',
-    'from-teal-400 to-teal-600',
-];
+// Harmonized + vibrant. Stable string keys mapped to hex pairs in COLOR_MAP.
+const PIECE_STYLES = ['coral', 'tangerine', 'lime', 'azure', 'magenta', 'cyan'];
 
 // SVGs inline
 const IconTrophy = () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
@@ -22,22 +15,72 @@ const IconAlert = () => <svg xmlns="http://www.w3.org/2000/svg" width="64" heigh
 const IconFullscreen = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>;
 const IconExitFullscreen = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 3 3 3 3 8"/><polyline points="21 8 21 3 16 3"/><polyline points="3 16 3 21 8 21"/><polyline points="16 21 21 21 21 16"/></svg>;
 
-const vibrate = (pattern) => { if (navigator.vibrate) try { navigator.vibrate(pattern); } catch (e) {} };
+// Persistent across calls so AudioContext isn't recreated and gets resumed once.
+let _audioCtx = null;
+const _ensureAudio = () => {
+    if (typeof window === 'undefined') return null;
+    if (!_audioCtx) {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return null;
+        try { _audioCtx = new Ctor(); } catch (e) { return null; }
+    }
+    if (_audioCtx.state === 'suspended') { try { _audioCtx.resume(); } catch (e) {} }
+    return _audioCtx;
+};
+const beep = (freq, duration = 0.15, volume = 0.3) => {
+    const ctx = _ensureAudio();
+    if (!ctx) return;
+    try {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(volume, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration + 0.02);
+    } catch (e) {}
+};
+const vibrate = (pattern) => {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        try { navigator.vibrate(pattern); } catch (e) {}
+    }
+};
+// Combined haptic + audio feedback. Audio is the iOS fallback since iOS Safari
+// has no Vibration API at all.
+const feedback = (kind) => {
+    if (kind === 'place')        { vibrate(35); }
+    else if (kind === 'invalid') { vibrate([60, 60, 60]); beep(180, 0.08, 0.15); }
+    else if (kind === 'select')  { vibrate(15); }
+    else if (kind === 'hover')   { vibrate(5); }
+    else if (kind === 'line1')   { vibrate([250]); beep(660, 0.18, 0.25); }
+    else if (kind === 'line2')   { vibrate([300, 80, 300]); beep(660, 0.12, 0.25); setTimeout(() => beep(880, 0.18, 0.25), 140); }
+    else if (kind === 'line3')   { vibrate([350, 90, 350, 90, 350]); beep(660, 0.1, 0.25); setTimeout(() => beep(880, 0.1, 0.25), 130); setTimeout(() => beep(1100, 0.18, 0.25), 260); }
+    else if (kind === 'line4')   { vibrate([400, 100, 400, 100, 400, 100, 500]); beep(660, 0.09, 0.3); setTimeout(() => beep(880, 0.09, 0.3), 120); setTimeout(() => beep(1100, 0.09, 0.3), 240); setTimeout(() => beep(1320, 0.22, 0.3), 360); }
+    else if (kind === 'explode') { vibrate([100, 50, 250]); beep(120, 0.25, 0.3); }
+};
 
 const COLOR_MAP = {
-    'from-rose-400 to-rose-600':    ['#fb7185', '#e11d48'],
-    'from-amber-400 to-amber-600':  ['#fbbf24', '#d97706'],
-    'from-emerald-400 to-emerald-600': ['#34d399', '#059669'],
-    'from-sky-400 to-sky-600':      ['#38bdf8', '#0284c7'],
-    'from-violet-400 to-violet-600': ['#a78bfa', '#7c3aed'],
-    'from-teal-400 to-teal-600':    ['#2dd4bf', '#0d9488'],
-    // UI gradients (used by buttons / locked stages, not piece colors)
-    'from-blue-400 to-cyan-300': ['#60a5fa', '#67e8f9'],
-    'from-blue-600 to-cyan-500': ['#2563eb', '#06b6d4'],
-    'from-blue-600 to-cyan-700': ['#2563eb', '#0e7490'],
-    'from-emerald-600 to-teal-700': ['#059669', '#0f766e'],
-    'from-purple-600 to-pink-700': ['#9333ea', '#be185d'],
+    coral:     ['#ff4d6d', '#d6033b'],
+    tangerine: ['#ff8c1a', '#e15700'],
+    lime:      ['#3fe85a', '#0fa830'],
+    azure:     ['#1ab8ff', '#0061d6'],
+    magenta:   ['#d040f0', '#8e0fc8'],
+    cyan:      ['#00e8c6', '#009b87'],
+    // UI gradients (used by buttons / pre-filled grayed cells, not piece colors)
     'from-gray-500 to-gray-600': ['#6b7280', '#4b5563'],
+};
+
+// Each color has a "natural" texture so the surface matches the gem/material
+// vibe of its hue. Used when textureMode === 'natural' (default).
+const COLOR_TEXTURES = {
+    coral:     'candy',
+    tangerine: 'glass',
+    lime:      'stone',
+    azure:     'metal',
+    magenta:   'candy',
+    cyan:      'glass',
 };
 
 const Block = ({ cellData, isDissolving, noAnim, extraClass = '', staggerDelay = 0, burst = false }) => {
@@ -58,7 +101,7 @@ const Block = ({ cellData, isDissolving, noAnim, extraClass = '', staggerDelay =
     const texture = (typeof cellData === 'object' && cellData.texture) || 'default';
     const colors = COLOR_MAP[colorClass] || ['#666', '#333'];
     const texStyle = { '--c-from': colors[0], '--c-to': colors[1], ...delayStyle };
-    return <div data-tex={texture} className={`w-full h-full bg-gradient-to-br ${colorClass} block-texture block-render ${animClass} relative rounded-[4px] overflow-hidden ${extraClass}`} style={texStyle} />;
+    return <div data-tex={texture} className={`w-full h-full block-render ${animClass} relative rounded-[4px] overflow-hidden ${extraClass}`} style={texStyle} />;
 };
 
 const PIECE_LIBRARY = [
@@ -118,14 +161,17 @@ const generateProceduralPiece = (level, mods = {}) => {
     pool = pool.filter(p => p.length <= cap && p.length >= minB);
     if (pool.length === 0) pool = PIECE_LIBRARY.filter(p => p.length <= cap);
     const shape = pool[Math.floor(Math.random() * pool.length)];
-    let texture = 'default';
+    const color = PIECE_STYLES[Math.floor(Math.random() * PIECE_STYLES.length)];
+    let texture;
     if (mods.textureMode === 'random') {
         const textures = ['candy', 'stone', 'metal', 'glass'];
         texture = textures[Math.floor(Math.random() * textures.length)];
-    } else if (mods.textureMode) {
+    } else if (!mods.textureMode || mods.textureMode === 'natural') {
+        texture = COLOR_TEXTURES[color] || 'default';
+    } else {
         texture = mods.textureMode;
     }
-    return { blocks: shape.map(([x, y]) => ({ x, y })), color: PIECE_STYLES[Math.floor(Math.random() * PIECE_STYLES.length)], texture };
+    return { blocks: shape.map(([x, y]) => ({ x, y })), color, texture };
 };
 
 const generateInventory = (level, mods = {}) => {
@@ -275,7 +321,7 @@ function App() {
     const [stagePieceCount, setStagePieceCount] = useState(0);
     const [stageResult, setStageResult] = useState(null); // null|'won'|'lost'
     const [boardShake, setBoardShake] = useState(false);
-    const [blockTexture, setBlockTexture] = useState(() => localStorage.getItem('tetris_texture') || 'random');
+    const [blockTexture, setBlockTexture] = useState(() => localStorage.getItem('tetris_texture') || 'natural');
     useEffect(() => {
         localStorage.setItem('tetris_texture', blockTexture);
     }, [blockTexture]);
@@ -567,8 +613,8 @@ function App() {
 
         // --- Explosive branch ---
         if (piece.type === 'explosive') {
-            if (gridX < 0 || gridX >= size || gridY < 0 || gridY >= size) { vibrate([50, 50]); return; }
-            vibrate([80, 40, 200]);
+            if (gridX < 0 || gridX >= size || gridY < 0 || gridY >= size) { feedback('invalid'); return; }
+            feedback('explode');
             const blastArea = [];
             for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
                 const nx = gridX + dx, ny = gridY + dy;
@@ -605,8 +651,8 @@ function App() {
             }
         }
 
-        if (!isValid) { vibrate([50, 50]); return; }
-        vibrate(40);
+        if (!isValid) { feedback('invalid'); return; }
+        feedback('place');
 
         let newBoard = [...gameState.board];
         for (const block of piece.blocks) newBoard[(gridY + block.y) * size + (gridX + block.x)] = { color: piece.color, type: piece.type || null, texture: piece.texture || 'default' };
@@ -630,10 +676,10 @@ function App() {
                 setFloatingTexts(prev => [...prev, { id, text: `+${comboScore}`, x: dragData.clientX, y: dragData.clientY - 50 }]);
                 setTimeout(() => setFloatingTexts(prev => prev.filter(ft => ft.id !== id)), 1500);
             }
-            if (totalLinesCleared === 1) vibrate([180]);
-            else if (totalLinesCleared === 2) vibrate([200, 80, 200]);
-            else if (totalLinesCleared === 3) vibrate([240, 80, 240, 80, 240]);
-            else vibrate([300, 100, 300, 100, 300, 100, 400]);
+            if (totalLinesCleared === 1) feedback('line1');
+            else if (totalLinesCleared === 2) feedback('line2');
+            else if (totalLinesCleared === 3) feedback('line3');
+            else feedback('line4');
             if (totalLinesCleared >= 2) { setBoardShake(true); setTimeout(() => setBoardShake(false), 350); }
         }
 
@@ -676,13 +722,13 @@ function App() {
     const handlePointerDown = (e, index) => {
         e.preventDefault();
         if (gameState.status === 'game_over' || showDashboard) return;
-        if (!canPlacePiece(gameState.board, gameState[playerRole].inventory[index])) { vibrate([30, 30]); return; }
+        if (!canPlacePiece(gameState.board, gameState[playerRole].inventory[index])) { feedback('invalid'); return; }
         
         const target = e.currentTarget; target.setPointerCapture(e.pointerId);
         const rect = target.getBoundingClientRect();
         setSelectedPieceIndex(index);
         setDragData({ index, pointerId: e.pointerId, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType, boardRect: gridRef.current ? gridRef.current.getBoundingClientRect() : null });
-        vibrate(15); 
+        feedback('select');
     };
 
     const handleGlobalPointerMove = (e) => {
@@ -703,7 +749,7 @@ function App() {
             if (isNearBoard && gridX >= -2 && gridX <= size + 2 && gridY >= -2 && gridY <= size + 2) {
                 setHoverCell({ x: gridX, y: gridY });
                 const cellId = `${gridX},${gridY}`;
-                if (lastHoverRef.current !== cellId) { lastHoverRef.current = cellId; vibrate(5); }
+                if (lastHoverRef.current !== cellId) { lastHoverRef.current = cellId; feedback('hover'); }
             } else {
                 setHoverCell(null); lastHoverRef.current = null;
             }
@@ -714,6 +760,9 @@ function App() {
     const handleGlobalPointerUp = (e) => {
         if (!dragData) return;
         if (hoverCell) attemptPlacement(hoverCell.x, hoverCell.y, dragData.index);
+        // Always clear selection so the mini-piece returns to its spawner slot,
+        // even if the drag ended off-board or on an invalid spot.
+        setSelectedPieceIndex(null);
         setDragData(null); setHoverCell(null); lastHoverRef.current = null;
     };
 
@@ -804,6 +853,7 @@ function App() {
                 </div>
                 <div className="mt-3 flex gap-2 justify-center w-full max-w-sm">
                     {[
+                        { key: 'natural', label: '🎨', title: 'Natural (cor → textura)' },
                         { key: 'random', label: '🎲', title: 'Aleatório' },
                         { key: 'default', label: '◆', title: 'Padrão' },
                         { key: 'candy', label: '🍭', title: 'Doce' },
@@ -994,8 +1044,9 @@ function App() {
                         </div>
                         <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 mb-6">
                             <span className="text-xs font-bold uppercase text-gray-400 mb-3 block">Textura dos Blocos</span>
-                            <div className="grid grid-cols-6 gap-2">
+                            <div className="grid grid-cols-7 gap-2">
                                 {[
+                                    { key: 'natural', label: '🎨', title: 'Natural (cor → textura)' },
                                     { key: 'random', label: '🎲', title: 'Aleatório' },
                                     { key: 'default', label: '◆', title: 'Padrão' },
                                     { key: 'candy', label: '🍭', title: 'Doce' },

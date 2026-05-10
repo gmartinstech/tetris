@@ -1,5 +1,12 @@
 body { overflow: hidden; touch-action: none; background-color: #030712; }
-.block-texture { box-shadow: inset 2px 2px 5px rgba(255,255,255,0.4), inset -3px -3px 8px rgba(0,0,0,0.6); }
+/* Default surface — color comes from CSS vars set inline by Block component. */
+.block-render {
+    position: relative;
+    background: linear-gradient(135deg, var(--c-from), var(--c-to));
+    box-shadow:
+        inset 2px 2px 5px rgba(255,255,255,0.45),
+        inset -3px -3px 8px rgba(0,0,0,0.55);
+}
 @keyframes popIn { 0% { transform: scale(0.7); opacity: 0; filter: brightness(2); } 60% { transform: scale(1.05); filter: brightness(1.2); } 100% { transform: scale(1); opacity: 1; filter: brightness(1); } }
 .animate-popIn { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
 @keyframes dissolve { 0% { transform: scale(1); filter: brightness(1); opacity: 1; border-radius: 4px; } 30% { transform: scale(1.15); filter: brightness(2) contrast(1.5); opacity: 1; box-shadow: 0 0 30px rgba(255,255,255,1); z-index: 10; } 100% { transform: scale(0.5); filter: brightness(3) blur(10px); opacity: 0; border-radius: 50%; } }
@@ -18,7 +25,6 @@ body { overflow: hidden; touch-action: none; background-color: #030712; }
 /* ---- Block textures ---- */
 /* Procedural noise via SVG feTurbulence (same tech AAA games use). One source,
    layered with gradients per material. Scales perfectly to any cell size. */
-.block-render { position: relative; }
 
 .block-render[data-tex="candy"] {
     background:
