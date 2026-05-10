@@ -70,6 +70,23 @@ const COLOR_MAP = {
     cyan:      ['#00e8c6', '#009b87'],
     // UI gradients (used by buttons / pre-filled grayed cells, not piece colors)
     'from-gray-500 to-gray-600': ['#6b7280', '#4b5563'],
+    // Legacy aliases — any pre-1.5.0 saved piece state still resolves to a
+    // sensible color from the new palette instead of fallback gray.
+    'from-red-400 to-red-600':       ['#ff4d6d', '#d6033b'],
+    'from-rose-400 to-rose-600':     ['#ff4d6d', '#d6033b'],
+    'from-pink-400 to-pink-600':     ['#ff4d6d', '#d6033b'],
+    'from-orange-400 to-orange-600': ['#ff8c1a', '#e15700'],
+    'from-amber-400 to-amber-600':   ['#ff8c1a', '#e15700'],
+    'from-yellow-400 to-yellow-600': ['#ff8c1a', '#e15700'],
+    'from-green-400 to-green-600':   ['#3fe85a', '#0fa830'],
+    'from-emerald-400 to-emerald-600': ['#3fe85a', '#0fa830'],
+    'from-lime-400 to-lime-600':     ['#3fe85a', '#0fa830'],
+    'from-blue-400 to-blue-600':     ['#1ab8ff', '#0061d6'],
+    'from-sky-400 to-sky-600':       ['#1ab8ff', '#0061d6'],
+    'from-purple-400 to-purple-600': ['#d040f0', '#8e0fc8'],
+    'from-violet-400 to-violet-600': ['#d040f0', '#8e0fc8'],
+    'from-cyan-400 to-cyan-600':     ['#00e8c6', '#009b87'],
+    'from-teal-400 to-teal-600':     ['#00e8c6', '#009b87'],
 };
 
 // Each color has a "natural" texture so the surface matches the gem/material
@@ -81,6 +98,23 @@ const COLOR_TEXTURES = {
     azure:     'metal',
     magenta:   'candy',
     cyan:      'glass',
+    // Legacy aliases mirror COLOR_MAP so natural mode picks the right texture
+    // for older saved pieces still floating in cached room state.
+    'from-red-400 to-red-600':       'candy',
+    'from-rose-400 to-rose-600':     'candy',
+    'from-pink-400 to-pink-600':     'candy',
+    'from-orange-400 to-orange-600': 'glass',
+    'from-amber-400 to-amber-600':   'glass',
+    'from-yellow-400 to-yellow-600': 'glass',
+    'from-green-400 to-green-600':   'stone',
+    'from-emerald-400 to-emerald-600': 'stone',
+    'from-lime-400 to-lime-600':     'stone',
+    'from-blue-400 to-blue-600':     'metal',
+    'from-sky-400 to-sky-600':       'metal',
+    'from-purple-400 to-purple-600': 'candy',
+    'from-violet-400 to-violet-600': 'candy',
+    'from-cyan-400 to-cyan-600':     'glass',
+    'from-teal-400 to-teal-600':     'glass',
 };
 
 const Block = ({ cellData, isDissolving, noAnim, extraClass = '', staggerDelay = 0, burst = false }) => {
@@ -308,7 +342,13 @@ function App() {
         return () => clearInterval(id);
     }, []);
     
-    const [mode, setMode] = useState(() => localStorage.getItem('tetris_mode') || 'menu'); // menu|coop|solo|career-map|career-stage
+    const [mode, setMode] = useState(() => {
+        // Direct deep-link to a room ?room=<slug> always lands the user in coop,
+        // regardless of whatever mode was last persisted (or none on a fresh browser).
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('room')) return 'coop';
+        return localStorage.getItem('tetris_mode') || 'menu';
+    }); // menu|coop|solo|career-map|career-stage
     const [gameState, setGameState] = useState(null);
     const [playerRole, setPlayerRole] = useState(null);
     const [selectedPieceIndex, setSelectedPieceIndex] = useState(null);
