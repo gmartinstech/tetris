@@ -139,6 +139,16 @@ const Block = ({ cellData, isDissolving, noAnim, extraClass = '', staggerDelay =
 };
 
 const PIECE_LIBRARY = [
+    // 2-block dominoes
+    [[0,0],[1,0]],                          // horizontal domino
+    [[0,0],[0,1]],                          // vertical domino
+    // 3-block triominoes
+    [[0,0],[1,0],[2,0]],                    // I3 horizontal
+    [[0,0],[0,1],[0,2]],                    // I3 vertical
+    [[0,0],[1,0],[0,1]],                    // L3 ┐
+    [[0,0],[1,0],[1,1]],                    // L3 ┌
+    [[0,0],[0,1],[1,1]],                    // L3 ┘
+    [[1,0],[0,1],[1,1]],                    // L3 └
     // 4-block classics
     [[0,0],[1,0],[2,0],[3,0]],              // I
     [[0,0],[1,0],[0,1],[1,1]],              // O
@@ -285,7 +295,7 @@ const CAREER_STAGES = [
 ];
 
 const SOLO_DIFFICULTIES = {
-    entry:   { name: 'Iniciante', boardSize: 7, density: 0,    modifiers: { maxBlocks: 4, banSpecials: true } },
+    entry:   { name: 'Iniciante', boardSize: 8, density: 0,    modifiers: { maxBlocks: 4, banSpecials: true } },
     easy:    { name: 'Fácil',     boardSize: 10, density: 0,    modifiers: { maxBlocks: 5, fillerPct: 0.12, explosivePct: 0.10 } },
     normal:  { name: 'Normal',    boardSize: 10, density: 0.1,  modifiers: {} },
     hard:    { name: 'Difícil',   boardSize: 10, density: 0.3,  modifiers: { fillerPct: 0.04, explosivePct: 0.04 } },
@@ -297,23 +307,17 @@ const computeStars = (stage, gs, pieces) => {
     return stage.stars.filter(t => v >= t).length;
 };
 
-const checkGameOver = (board, mods = {}) => {
-    const size = getBoardSize(board);
-    let pool = mods.onlyDiagonal ? PIECE_LIBRARY.slice(DIAGONAL_OFFSET) : PIECE_LIBRARY;
-    if (mods.maxBlocks != null) pool = pool.filter(p => p.length <= mods.maxBlocks);
-    if (mods.minBlocks != null) pool = pool.filter(p => p.length >= mods.minBlocks);
-    if (pool.length === 0) pool = PIECE_LIBRARY;
-    return !pool.some(shape => {
-        const testPiece = { blocks: { blocks: shape.map(([x, y]) => ({ x, y })) } };
-        return canPlacePiece(board, testPiece);
-    });
-};
+const playerStuck = (player, board) =>
+    !player?.inventory?.some(p => p.blocks && canPlacePiece(board, p));
 
-const freshIfStuck = (player, board, level, mods = {}) => {
-    if (!player?.inventory) return player;
-    if (!player.inventory.some(p => p.blocks && canPlacePiece(board, p)))
-        return { ...player, inventory: generateInventory(level, mods) };
-    return player;
+// Game ends only when every present player's CURRENT inventory has no playable
+// piece. Don't refresh anyone's inventory just because they're stuck — the
+// other player keeps playing until they unblock the board (or until both are
+// stuck on real pieces).
+const allPlayersStuck = (state) => {
+    const present = ['p1', 'p2'].filter(r => state[r] && state[r].inventory);
+    if (present.length === 0) return false;
+    return present.every(r => playerStuck(state[r], state.board));
 };
 function App() {
     const [userId] = useState(() => {
@@ -368,7 +372,10 @@ function App() {
     const [soloHighScore, setSoloHighScore] = useState(() => parseInt(localStorage.getItem('tetris_solo_hs') || '0'));
     const [soloDifficulty, setSoloDifficulty] = useState(() => localStorage.getItem('tetris_solo_diff') || 'normal');
     useEffect(() => { localStorage.setItem('tetris_solo_diff', soloDifficulty); }, [soloDifficulty]);
-    const [coopBoardSize, setCoopBoardSize] = useState(() => parseInt(localStorage.getItem('tetris_coop_size') || '10'));
+    const [coopBoardSize, setCoopBoardSize] = useState(() => {
+        const v = parseInt(localStorage.getItem('tetris_coop_size') || '10');
+        return v === 7 ? 8 : v; // migrate prior 7×7 selection to the new 8×8
+    });
     useEffect(() => { localStorage.setItem('tetris_coop_size', String(coopBoardSize)); }, [coopBoardSize]);
     const [coopRoom, setCoopRoom] = useState(() => {
         const params = new URLSearchParams(window.location.search);
@@ -396,6 +403,27 @@ function App() {
     const gridRef = useRef(null);
     const lastHoverRef = useRef(null);
     const [dragData, setDragData] = useState(null);
+    const lastHoverSentRef = useRef(0);
+    const lastHoverPayloadRef = useRef('');
+
+    const sendHoverBroadcast = (payload) => {
+        if (mode !== 'coop' || !coopRoom) return;
+        const body = JSON.stringify({ ...payload, uid: userId });
+        if (body === lastHoverPayloadRef.current) return;
+        lastHoverPayloadRef.current = body;
+        fetch(`hover?room=${encodeURIComponent(coopRoom)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            keepalive: true,
+        }).catch(() => {});
+    };
+    const throttledHoverBroadcast = (payload) => {
+        const now = Date.now();
+        if (now - lastHoverSentRef.current < 80) return;
+        lastHoverSentRef.current = now;
+        sendHoverBroadcast(payload);
+    };
 
     useEffect(() => { localStorage.setItem('tetris_mode', mode); }, [mode]);
 
@@ -414,6 +442,8 @@ function App() {
         if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
         else document.exitFullscreen();
     };
+
+    const [partnerHover, setPartnerHover] = useState(null);
 
     // --- SSE (Server-Sent Events) Setup — only co-op, scoped to room ---
     useEffect(() => {
@@ -438,12 +468,28 @@ function App() {
                     else if (data.p2 && data.p2.uid === userId) setPlayerRole('p2');
                     else setPlayerRole(null);
                 };
+                es.addEventListener('hover', (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        // Ignore our own hover broadcasts (server fans out to all clients)
+                        if (msg.uid && msg.uid === userId) return;
+                        if (msg.x == null) setPartnerHover(null);
+                        else setPartnerHover(msg);
+                    } catch (e) {}
+                });
                 es.onerror = () => { es.close(); setTimeout(connectSSE, 1000); };
             };
             connectSSE();
         }).catch(() => {});
-        return () => { cancelled = true; if(es) es.close(); };
+        return () => { cancelled = true; if(es) es.close(); setPartnerHover(null); };
     }, [userId, mode, coopRoom]);
+
+    // Clear stale partner hover after 3s of no updates (drag aborted / partner offline)
+    useEffect(() => {
+        if (!partnerHover) return;
+        const id = setTimeout(() => setPartnerHover(null), 3000);
+        return () => clearTimeout(id);
+    }, [partnerHover]);
 
     // Auto-reconnect: if co-op state already has our uid, restore role
     useEffect(() => {
@@ -571,23 +617,14 @@ function App() {
         setGameState(null); setStagePieceCount(0); setStageResult(null);
     };
 
-    // Auto-refresh: if my inventory is fully unplaceable but the board still has room, regenerate
+    // Game-over check only — never auto-regenerate a stuck player's inventory.
+    // If only one player is stuck, the other keeps playing until they clear the
+    // board enough that the stuck player can act, OR until both are stuck.
     useEffect(() => {
         if (!gameState || !playerRole) return;
         if (gameState.status !== 'playing') return;
         if (gameState.clearingLines?.rows?.length > 0 || gameState.clearingLines?.cols?.length > 0 || gameState.explosionArea?.length > 0) return;
-        const me = gameState[playerRole];
-        if (!me?.inventory) return;
-        if (me.inventory.every(p => !p.blocks)) return;
-        const canPlay = me.inventory.some(p => p.blocks && canPlacePiece(gameState.board, p));
-        if (!canPlay) {
-            const mods = gameState.modifiers || {};
-            if (checkGameOver(gameState.board, mods)) {
-                syncState({ ...gameState, status: 'game_over' });
-            } else {
-                syncState({ ...gameState, [playerRole]: { ...me, inventory: generateInventory(gameState.level, mods) } });
-            }
-        }
+        if (allPlayersStuck(gameState)) syncState({ ...gameState, status: 'game_over' });
     }, [gameState, playerRole]);
 
     // --- State sync: co-op broadcasts to server, solo/career stays local ---
@@ -607,7 +644,7 @@ function App() {
         const noPlayers = !baseState || (!baseState.p1 && !baseState.p2);
         if (noPlayers) {
             const size = coopBoardSize;
-            const sizeMods = size <= 7 ? { maxBlocks: 4, banSpecials: true } : {};
+            const sizeMods = size <= 8 ? { maxBlocks: 4, banSpecials: true } : {};
             baseState = {
                 board: generateComplexInitialBoard(size, 0),
                 p1: null, p2: null, score: 0, level: 1, lines: 0, status: 'playing',
@@ -674,10 +711,9 @@ function App() {
                 blastArea.forEach(({ x, y }) => { newBoard[y * size + x] = 0; });
                 const newScore = gameState.score;
                 const newLevel = 1 + Math.floor(newScore / 1000);
-                const freshP1 = freshIfStuck(nextP1, newBoard, newLevel, mods);
-                const freshP2 = freshIfStuck(nextP2, newBoard, newLevel, mods);
-                const isGameOver = checkGameOver(newBoard, mods);
-                syncState({ ...gameState, board: newBoard, explosionArea: [], score: newScore, lines: gameState.lines, level: newLevel, status: isGameOver ? 'game_over' : 'playing', p1: freshP1, p2: freshP2 });
+                const next = { ...gameState, board: newBoard, explosionArea: [], score: newScore, lines: gameState.lines, level: newLevel, p1: nextP1, p2: nextP2 };
+                next.status = allPlayersStuck(next) ? 'game_over' : 'playing';
+                syncState(next);
             }, 500);
             return;
         }
@@ -743,18 +779,16 @@ function App() {
                 for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
                     if (rowsToClear.has(y) || colsToClear.has(x)) clearedBoard[y * size + x] = 0;
                 }
-                const freshP1 = freshIfStuck(nextP1, clearedBoard, newLevel, mods);
-                const freshP2 = freshIfStuck(nextP2, clearedBoard, newLevel, mods);
-                const isGameOver = checkGameOver(clearedBoard, mods);
-                syncState({ ...gameState, board: clearedBoard, clearingLines: { rows: [], cols: [] }, score: newScore, lines: newLines, level: newLevel, status: isGameOver ? 'game_over' : 'playing', p1: freshP1, p2: freshP2 });
+                const next = { ...gameState, board: clearedBoard, clearingLines: { rows: [], cols: [] }, score: newScore, lines: newLines, level: newLevel, p1: nextP1, p2: nextP2 };
+                next.status = allPlayersStuck(next) ? 'game_over' : 'playing';
+                syncState(next);
             }, 500);
             return;
         }
 
-        const freshP1 = freshIfStuck(nextP1, newBoard, newLevel, mods);
-        const freshP2 = freshIfStuck(nextP2, newBoard, newLevel, mods);
-        const isGameOver = checkGameOver(newBoard, mods);
-        syncState({ ...gameState, board: newBoard, p1: freshP1, p2: freshP2, score: newScore, lines: newLines, level: newLevel, status: isGameOver ? 'game_over' : 'playing' });
+        const next = { ...gameState, board: newBoard, p1: nextP1, p2: nextP2, score: newScore, lines: newLines, level: newLevel };
+        next.status = allPlayersStuck(next) ? 'game_over' : 'playing';
+        syncState(next);
         setSelectedPieceIndex(null); setHoverCell(null); setDragData(null);
         setStagePieceCount(c => c + 1);
     };
@@ -790,8 +824,22 @@ function App() {
                 setHoverCell({ x: gridX, y: gridY });
                 const cellId = `${gridX},${gridY}`;
                 if (lastHoverRef.current !== cellId) { lastHoverRef.current = cellId; feedback('hover'); }
+                if (mode === 'coop' && playerRole && gameState) {
+                    const piece = gameState[playerRole]?.inventory?.[dragData.index]?.blocks;
+                    if (piece && piece.blocks) {
+                        throttledHoverBroadcast({
+                            role: playerRole,
+                            x: gridX, y: gridY,
+                            blocks: piece.blocks,
+                            color: piece.color,
+                            texture: piece.texture,
+                            type: piece.type || null,
+                        });
+                    }
+                }
             } else {
                 setHoverCell(null); lastHoverRef.current = null;
+                if (mode === 'coop' && playerRole) sendHoverBroadcast({ role: playerRole, x: null, y: null });
             }
         }
         setDragData(newDragData);
@@ -804,6 +852,7 @@ function App() {
         // even if the drag ended off-board or on an invalid spot.
         setSelectedPieceIndex(null);
         setDragData(null); setHoverCell(null); lastHoverRef.current = null;
+        if (mode === 'coop' && playerRole) sendHoverBroadcast({ role: playerRole, x: null, y: null });
     };
 
     const renderMiniPiece = (pieceWrapper, isSelected, onPointerDown) => {
@@ -993,10 +1042,10 @@ function App() {
                         <div className="mb-6">
                             <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Tamanho do tabuleiro</div>
                             <div className="grid grid-cols-2 gap-2">
-                                {[7, 10].map(s => (
+                                {[8, 10].map(s => (
                                     <button key={s} onClick={() => setCoopBoardSize(s)}
                                         className={`py-3 rounded-xl font-black text-sm border transition-all ${coopBoardSize === s ? 'bg-blue-600 text-white border-blue-400 ring-1 ring-blue-400' : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'}`}>
-                                        {s}×{s}{s === 7 ? ' · simples' : ''}
+                                        {s}×{s}{s === 8 ? ' · simples' : ''}
                                     </button>
                                 ))}
                             </div>
@@ -1042,7 +1091,16 @@ function App() {
                         const inExplosion = gameState.explosionArea?.some(c => c.x === x && c.y === y);
                         const isDissolving = inClearingRow || inClearingCol || inExplosion;
                         const staggerDelay = inClearingRow ? x * 35 : (inClearingCol ? y * 35 : 0);
-                        return <div key={index} className="relative aspect-square p-[1px]"><Block cellData={cellValue !== 0 ? cellValue : null} isDissolving={isDissolving} staggerDelay={staggerDelay} burst={inClearingRow || inClearingCol} /></div>;
+                        const ghosted = partnerHover && partnerHover.blocks && partnerHover.x != null
+                            && partnerHover.blocks.some(b => (partnerHover.x + b.x) === x && (partnerHover.y + b.y) === y);
+                        const ghostColors = ghosted ? (COLOR_MAP[partnerHover.color] || ['#888','#555']) : null;
+                        return <div key={index} className="relative aspect-square p-[1px]">
+                            <Block cellData={cellValue !== 0 ? cellValue : null} isDissolving={isDissolving} staggerDelay={staggerDelay} burst={inClearingRow || inClearingCol} />
+                            {ghosted && cellValue === 0 && (
+                                <div className="absolute inset-[1px] rounded-[4px] pointer-events-none animate-pulse"
+                                    style={{ background: `linear-gradient(135deg, ${ghostColors[0]}55, ${ghostColors[1]}55)`, border: `1.5px dashed ${ghostColors[0]}`, boxShadow: `0 0 8px ${ghostColors[0]}88` }} />
+                            )}
+                        </div>;
                     })}
                 </div>
 

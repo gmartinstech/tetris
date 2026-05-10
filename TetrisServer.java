@@ -320,6 +320,49 @@ public class TetrisServer {
         }
     }
 
+    private static void broadcastEvent(Room room, String eventName, String payload) {
+        byte[] data = ("event: " + eventName + "\ndata: " + payload + "\n\n").getBytes(StandardCharsets.UTF_8);
+        for (OutputStream os : room.sseClients) {
+            try { os.write(data); os.flush(); }
+            catch (Exception e) { room.sseClients.remove(os); }
+        }
+    }
+
+    private static void handleHover(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        if ("OPTIONS".equals(exchange.getRequestMethod())) {
+            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "POST, OPTIONS");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+            exchange.sendResponseHeaders(204, -1);
+            return;
+        }
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            exchange.sendResponseHeaders(405, -1);
+            return;
+        }
+        String slug = queryParam(exchange.getRequestURI(), "room");
+        if (slug == null || !SLUG_RE.matcher(slug).matches()) {
+            exchange.sendResponseHeaders(400, -1);
+            return;
+        }
+        Room room = rooms.get(slug);
+        if (room == null) {
+            exchange.sendResponseHeaders(404, -1);
+            return;
+        }
+        String body;
+        try (InputStream is = exchange.getRequestBody()) {
+            body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        if (body.length() > 4_000) {
+            exchange.sendResponseHeaders(413, -1);
+            return;
+        }
+        room.touch();
+        broadcastEvent(room, "hover", body);
+        exchange.sendResponseHeaders(204, -1);
+    }
+
     private static void sweepStaleRooms() {
         long cutoff = System.currentTimeMillis() - ROOM_TTL_MS;
         for (var entry : rooms.entrySet()) {
@@ -498,6 +541,7 @@ public class TetrisServer {
 
         server.createContext("/events", TetrisServer::handleEvents);
         server.createContext("/action", TetrisServer::handleAction);
+        server.createContext("/hover", TetrisServer::handleHover);
         server.createContext("/room/create", TetrisServer::handleRoomCreate);
         server.createContext("/room/", TetrisServer::handleRoomGet);
 
