@@ -210,29 +210,25 @@ public class TetrisServer {
 
                 /* ---- Block textures ---- */
                 .block-render { position: relative; }
-                /* Candy: conic swirl with glossy highlight */
-                [data-block-tex="candy"] .block-render {
+                .block-render[data-tex="candy"] {
                     background: radial-gradient(ellipse at 30% 30%, rgba(255,255,255,0.45) 0%, transparent 50%),
                                 repeating-conic-gradient(var(--c-from) 0% 12%, var(--c-to) 12% 24%) !important;
                     box-shadow: inset 2px 2px 6px rgba(255,255,255,0.45), inset -2px -2px 6px rgba(0,0,0,0.4) !important;
                 }
-                /* Stone: layered grainy rock */
-                [data-block-tex="stone"] .block-render {
+                .block-render[data-tex="stone"] {
                     background: radial-gradient(circle at 25% 25%, rgba(255,255,255,0.12) 0%, transparent 35%),
                                 radial-gradient(circle at 75% 75%, rgba(0,0,0,0.2) 0%, transparent 35%),
                                 repeating-linear-gradient(45deg, transparent 0px, transparent 2px, rgba(255,255,255,0.04) 2px, rgba(255,255,255,0.04) 3px),
                                 linear-gradient(160deg, var(--c-from) 0%, var(--c-to) 100%) !important;
                     box-shadow: inset 1px 1px 3px rgba(255,255,255,0.25), inset -2px -2px 5px rgba(0,0,0,0.5) !important;
                 }
-                /* Metal: brushed horizontal lines */
-                [data-block-tex="metal"] .block-render {
+                .block-render[data-tex="metal"] {
                     background: repeating-linear-gradient(0deg, transparent 0px, rgba(255,255,255,0.07) 1px, transparent 2px),
                                 repeating-linear-gradient(90deg, transparent 0px, rgba(0,0,0,0.06) 1px, transparent 3px),
                                 linear-gradient(180deg, var(--c-from) 0%, var(--c-to) 100%) !important;
                     box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), inset 0 -1px 2px rgba(0,0,0,0.35) !important;
                 }
-                /* Glass: crystal with reflections */
-                [data-block-tex="glass"] .block-render {
+                .block-render[data-tex="glass"] {
                     background: radial-gradient(ellipse at 35% 25%, rgba(255,255,255,0.5) 0%, transparent 50%),
                                 linear-gradient(170deg, rgba(255,255,255,0.2) 0%, transparent 45%),
                                 linear-gradient(to bottom right, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
@@ -305,9 +301,10 @@ public class TetrisServer {
                             style={{ background: 'radial-gradient(circle at 42% 38%, #ff6a00 0%, #c0200a 45%, #1a0000 100%)', boxShadow: 'inset 1px 1px 4px rgba(255,160,0,0.6), inset -1px -1px 5px rgba(0,0,0,0.9)', ...delayStyle }} />
                     );
                     const colorClass = typeof cellData === 'string' ? cellData : cellData.color;
+                    const texture = (typeof cellData === 'object' && cellData.texture) || 'default';
                     const colors = COLOR_MAP[colorClass] || ['#666', '#333'];
                     const texStyle = { '--c-from': colors[0], '--c-to': colors[1], ...delayStyle };
-                    return <div className={`w-full h-full bg-gradient-to-br ${colorClass} block-texture block-render ${animClass} relative rounded-[4px] overflow-hidden ${extraClass}`} style={texStyle} />;
+                    return <div data-tex={texture} className={`w-full h-full bg-gradient-to-br ${colorClass} block-texture block-render ${animClass} relative rounded-[4px] overflow-hidden ${extraClass}`} style={texStyle} />;
                 };
 
                 const PIECE_LIBRARY = [
@@ -367,7 +364,14 @@ public class TetrisServer {
                     pool = pool.filter(p => p.length <= cap && p.length >= minB);
                     if (pool.length === 0) pool = PIECE_LIBRARY.filter(p => p.length <= cap);
                     const shape = pool[Math.floor(Math.random() * pool.length)];
-                    return { blocks: shape.map(([x, y]) => ({ x, y })), color: PIECE_STYLES[Math.floor(Math.random() * PIECE_STYLES.length)] };
+                    let texture = 'default';
+                    if (mods.textureMode === 'random') {
+                        const textures = ['candy', 'stone', 'metal', 'glass'];
+                        texture = textures[Math.floor(Math.random() * textures.length)];
+                    } else if (mods.textureMode) {
+                        texture = mods.textureMode;
+                    }
+                    return { blocks: shape.map(([x, y]) => ({ x, y })), color: PIECE_STYLES[Math.floor(Math.random() * PIECE_STYLES.length)], texture };
                 };
 
                 const generateInventory = (level, mods = {}) => {
@@ -386,19 +390,21 @@ public class TetrisServer {
                     return [makeSlot(), makeSlot(), makeSlot()];
                 };
 
-                const generateComplexInitialBoard = (density = 0.05) => {
-                    let newBoard = Array(BOARD_SIZE * BOARD_SIZE).fill(0);
-                    const targetCells = Math.floor(BOARD_SIZE * BOARD_SIZE * density);
+                const getBoardSize = (board) => Math.round(Math.sqrt(board.length)) || BOARD_SIZE;
+
+                const generateComplexInitialBoard = (size = BOARD_SIZE, density = 0.05) => {
+                    let newBoard = Array(size * size).fill(0);
+                    const targetCells = Math.floor(size * size * density);
                     let attempts = 0;
                     while (newBoard.filter(v => v !== 0).length < targetCells && attempts < 200) {
                         const piece = generateProceduralPiece(2);
-                        const startX = Math.floor(Math.random() * BOARD_SIZE); const startY = Math.floor(Math.random() * BOARD_SIZE);
+                        const startX = Math.floor(Math.random() * size); const startY = Math.floor(Math.random() * size);
                         let isValid = true;
                         for (const block of piece.blocks) {
                             const tX = startX + block.x; const tY = startY + block.y;
-                            if (tX < 0 || tX >= BOARD_SIZE || tY < 0 || tY >= BOARD_SIZE || newBoard[tY * BOARD_SIZE + tX] !== 0) { isValid = false; break; }
+                            if (tX < 0 || tX >= size || tY < 0 || tY >= size || newBoard[tY * size + tX] !== 0) { isValid = false; break; }
                         }
-                        if (isValid) for (const block of piece.blocks) newBoard[(startY + block.y) * BOARD_SIZE + (startX + block.x)] = { color: 'from-gray-500 to-gray-600 grayscale-[20%]' };
+                        if (isValid) for (const block of piece.blocks) newBoard[(startY + block.y) * size + (startX + block.x)] = { color: 'from-gray-500 to-gray-600 grayscale-[20%]' };
                         attempts++;
                     }
                     return newBoard;
@@ -406,13 +412,14 @@ public class TetrisServer {
 
                 const canPlacePiece = (board, piece) => {
                     if (!piece || !piece.blocks || !piece.blocks.blocks) return false;
+                    const size = getBoardSize(board);
                     if (piece.blocks.type === 'explosive') return true;
-                    for (let gridY = 0; gridY < BOARD_SIZE; gridY++) {
-                        for (let gridX = 0; gridX < BOARD_SIZE; gridX++) {
+                    for (let gridY = 0; gridY < size; gridY++) {
+                        for (let gridX = 0; gridX < size; gridX++) {
                             let isValid = true;
                             for (const block of piece.blocks.blocks) {
                                 const tX = gridX + block.x; const tY = gridY + block.y;
-                                if (tX < 0 || tX >= BOARD_SIZE || tY < 0 || tY >= BOARD_SIZE || board[tY * BOARD_SIZE + tX] !== 0) { isValid = false; break; }
+                                if (tX < 0 || tX >= size || tY < 0 || tY >= size || board[tY * size + tX] !== 0) { isValid = false; break; }
                             }
                             if (isValid) return true;
                         }
@@ -444,10 +451,11 @@ public class TetrisServer {
                 ];
 
                 const SOLO_DIFFICULTIES = {
-                    easy:    { name: 'Fácil',   density: 0,    modifiers: { maxBlocks: 5, fillerPct: 0.12, explosivePct: 0.10 } },
-                    normal:  { name: 'Normal',  density: 0.1,  modifiers: {} },
-                    hard:    { name: 'Difícil', density: 0.3,  modifiers: { fillerPct: 0.04, explosivePct: 0.04 } },
-                    extreme: { name: 'Extremo', density: 0.5,  modifiers: { banSpecials: true } },
+                    entry:   { name: 'Iniciante', boardSize: 7, density: 0,    modifiers: { maxBlocks: 4, banSpecials: true } },
+                    easy:    { name: 'Fácil',     boardSize: 10, density: 0,    modifiers: { maxBlocks: 5, fillerPct: 0.12, explosivePct: 0.10 } },
+                    normal:  { name: 'Normal',    boardSize: 10, density: 0.1,  modifiers: {} },
+                    hard:    { name: 'Difícil',   boardSize: 10, density: 0.3,  modifiers: { fillerPct: 0.04, explosivePct: 0.04 } },
+                    extreme: { name: 'Extremo',   boardSize: 10, density: 0.5,  modifiers: { banSpecials: true } },
                 };
 
                 const computeStars = (stage, gs, pieces) => {
@@ -456,7 +464,7 @@ public class TetrisServer {
                 };
 
                 const checkGameOver = (board, mods = {}) => {
-                    // Restrict to the same pool the inventory generator can produce
+                    const size = getBoardSize(board);
                     let pool = mods.onlyDiagonal ? PIECE_LIBRARY.slice(DIAGONAL_OFFSET) : PIECE_LIBRARY;
                     if (mods.maxBlocks != null) pool = pool.filter(p => p.length <= mods.maxBlocks);
                     if (mods.minBlocks != null) pool = pool.filter(p => p.length >= mods.minBlocks);
@@ -504,10 +512,9 @@ public class TetrisServer {
                     const [stagePieceCount, setStagePieceCount] = useState(0);
                     const [stageResult, setStageResult] = useState(null); // null|'won'|'lost'
                     const [boardShake, setBoardShake] = useState(false);
-                    const [blockTexture, setBlockTexture] = useState(() => localStorage.getItem('tetris_texture') || 'default');
+                    const [blockTexture, setBlockTexture] = useState(() => localStorage.getItem('tetris_texture') || 'random');
                     useEffect(() => {
                         localStorage.setItem('tetris_texture', blockTexture);
-                        document.body.setAttribute('data-block-tex', blockTexture);
                     }, [blockTexture]);
                     const [soloHighScore, setSoloHighScore] = useState(() => parseInt(localStorage.getItem('tetris_solo_hs') || '0'));
                     const [soloDifficulty, setSoloDifficulty] = useState(() => localStorage.getItem('tetris_solo_diff') || 'normal');
@@ -564,12 +571,13 @@ public class TetrisServer {
                     useEffect(() => {
                         if (mode !== 'solo' || gameState) return;
                         const diff = SOLO_DIFFICULTIES[soloDifficulty] || SOLO_DIFFICULTIES.normal;
+                        const size = diff.boardSize || BOARD_SIZE;
                         setGameState({
-                            board: generateComplexInitialBoard(diff.density),
-                            p1: { uid: userId, name: 'Solo', inventory: generateInventory(1, diff.modifiers) },
+                            board: generateComplexInitialBoard(size, diff.density),
+                            p1: { uid: userId, name: 'Solo', inventory: generateInventory(1, { ...diff.modifiers, textureMode: blockTexture }) },
                             p2: null, score: 0, level: 1, lines: 0, status: 'playing',
                             clearingLines: { rows: [], cols: [] }, explosionArea: [],
-                            modifiers: diff.modifiers, density: diff.density
+                            modifiers: { ...diff.modifiers, textureMode: blockTexture }, density: diff.density, boardSize: size
                         });
                         setPlayerRole('p1'); setStagePieceCount(0); setStageResult(null);
                     }, [mode, gameState, userId, soloDifficulty]);
@@ -577,13 +585,14 @@ public class TetrisServer {
                     // Career stage init: build a fresh local state when entering a stage
                     useEffect(() => {
                         if (mode !== 'career-stage' || !activeStage || gameState) return;
-                        const mods = activeStage.modifiers || {};
+                        const mods = { ...activeStage.modifiers, textureMode: blockTexture };
+                        const size = mods.boardSize || BOARD_SIZE;
                         setGameState({
-                            board: generateComplexInitialBoard(activeStage.density || 0),
+                            board: generateComplexInitialBoard(size, activeStage.density || 0),
                             p1: { uid: userId, name: 'Solo', inventory: generateInventory(1, mods) },
                             p2: null, score: 0, level: 1, lines: 0, status: 'playing',
                             clearingLines: { rows: [], cols: [] }, explosionArea: [],
-                            modifiers: mods, density: activeStage.density || 0
+                            modifiers: mods, density: activeStage.density || 0, boardSize: size
                         });
                         setPlayerRole('p1'); setStagePieceCount(0); setStageResult(null);
                     }, [mode, activeStage, gameState, userId]);
@@ -671,17 +680,18 @@ public class TetrisServer {
 
                     const joinGame = (role, name) => {
                         if (!gameState) return;
-                        const mods = gameState.modifiers || {};
+                        const mods = { ...(gameState.modifiers || {}), textureMode: blockTexture };
                         const newState = { ...gameState, [role]: { uid: userId, name: name, inventory: generateInventory(gameState.level, mods) } };
                         syncState(newState);
                     };
 
                     const resetGame = () => {
-                        const mods = gameState.modifiers || {};
-                        const density = gameState.density ?? 0.05;
+                        const mods = { ...(gameState.modifiers || {}), textureMode: blockTexture };
+                        const density = gameState.density ?? 0;
+                        const size = gameState.boardSize || BOARD_SIZE;
                         syncState({
                             ...gameState,
-                            board: generateComplexInitialBoard(density),
+                            board: generateComplexInitialBoard(size, density),
                             p1: gameState.p1 ? { ...gameState.p1, inventory: generateInventory(1, mods) } : null,
                             p2: gameState.p2 ? { ...gameState.p2, inventory: generateInventory(1, mods) } : null,
                             score: 0, level: 1, lines: 0, status: 'playing',
@@ -700,6 +710,7 @@ public class TetrisServer {
                         if (!playerRole || pieceIndex === null || !gameState) return;
                         if (gameState.clearingLines?.rows?.length > 0 || gameState.clearingLines?.cols?.length > 0 || gameState.explosionArea?.length > 0) return;
 
+                        const size = gameState.boardSize || BOARD_SIZE;
                         const playerState = gameState[playerRole];
                         const pieceObj = playerState.inventory[pieceIndex];
                         if (!pieceObj || !pieceObj.blocks) return;
@@ -707,12 +718,12 @@ public class TetrisServer {
 
                         // --- Explosive branch ---
                         if (piece.type === 'explosive') {
-                            if (gridX < 0 || gridX >= BOARD_SIZE || gridY < 0 || gridY >= BOARD_SIZE) { vibrate([50, 50]); return; }
+                            if (gridX < 0 || gridX >= size || gridY < 0 || gridY >= size) { vibrate([50, 50]); return; }
                             vibrate([80, 40, 200]);
                             const blastArea = [];
                             for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
                                 const nx = gridX + dx, ny = gridY + dy;
-                                if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) blastArea.push({ x: nx, y: ny });
+                                if (nx >= 0 && nx < size && ny >= 0 && ny < size) blastArea.push({ x: nx, y: ny });
                             }
                             const mods = gameState.modifiers || {};
                             let newInventory = [...playerState.inventory];
@@ -725,7 +736,7 @@ public class TetrisServer {
                             setStagePieceCount(c => c + 1);
                             setTimeout(() => {
                                 let newBoard = [...gameState.board];
-                                blastArea.forEach(({ x, y }) => { newBoard[y * BOARD_SIZE + x] = 0; });
+                                blastArea.forEach(({ x, y }) => { newBoard[y * size + x] = 0; });
                                 const newScore = gameState.score;
                                 const newLevel = 1 + Math.floor(newScore / 1000);
                                 const freshP1 = freshIfStuck(nextP1, newBoard, newLevel, mods);
@@ -740,7 +751,7 @@ public class TetrisServer {
                         let isValid = true;
                         for (const block of piece.blocks) {
                             const targetX = gridX + block.x; const targetY = gridY + block.y;
-                            if (targetX < 0 || targetX >= BOARD_SIZE || targetY < 0 || targetY >= BOARD_SIZE || gameState.board[targetY * BOARD_SIZE + targetX] !== 0) {
+                            if (targetX < 0 || targetX >= size || targetY < 0 || targetY >= size || gameState.board[targetY * size + targetX] !== 0) {
                                 isValid = false; break;
                             }
                         }
@@ -749,13 +760,13 @@ public class TetrisServer {
                         vibrate(40);
 
                         let newBoard = [...gameState.board];
-                        for (const block of piece.blocks) newBoard[(gridY + block.y) * BOARD_SIZE + (gridX + block.x)] = { color: piece.color, type: piece.type || null };
+                        for (const block of piece.blocks) newBoard[(gridY + block.y) * size + (gridX + block.x)] = { color: piece.color, type: piece.type || null, texture: piece.texture || 'default' };
 
                         let rowsToClear = new Set(); let colsToClear = new Set();
-                        for (let y = 0; y < BOARD_SIZE; y++) if (newBoard.slice(y * BOARD_SIZE, (y + 1) * BOARD_SIZE).every(v => v !== 0)) rowsToClear.add(y);
-                        for (let x = 0; x < BOARD_SIZE; x++) {
+                        for (let y = 0; y < size; y++) if (newBoard.slice(y * size, (y + 1) * size).every(v => v !== 0)) rowsToClear.add(y);
+                        for (let x = 0; x < size; x++) {
                             let colComplete = true;
-                            for (let y = 0; y < BOARD_SIZE; y++) { if (newBoard[y * BOARD_SIZE + x] === 0) { colComplete = false; break; } }
+                            for (let y = 0; y < size; y++) { if (newBoard[y * size + x] === 0) { colComplete = false; break; } }
                             if (colComplete) colsToClear.add(x);
                         }
 
@@ -770,11 +781,10 @@ public class TetrisServer {
                                 setFloatingTexts(prev => [...prev, { id, text: `+${comboScore}`, x: dragData.clientX, y: dragData.clientY - 50 }]);
                                 setTimeout(() => setFloatingTexts(prev => prev.filter(ft => ft.id !== id)), 1500);
                             }
-                            // Scaled vibration: more lines = stronger rumble
                             if (totalLinesCleared === 1) vibrate([60, 30, 60]);
                             else if (totalLinesCleared === 2) vibrate([80, 40, 80, 40, 80]);
                             else if (totalLinesCleared === 3) vibrate([100, 50, 100, 50, 100, 50, 100]);
-                            else vibrate([120, 60, 120, 60, 120, 60, 120, 60, 120, 60, 120]); // 4+ celebration
+                            else vibrate([120, 60, 120, 60, 120, 60, 120, 60, 120, 60, 120]);
                             if (totalLinesCleared >= 2) { setBoardShake(true); setTimeout(() => setBoardShake(false), 350); }
                         }
 
@@ -795,8 +805,8 @@ public class TetrisServer {
                             setStagePieceCount(c => c + 1);
                             setTimeout(() => {
                                 let clearedBoard = [...newBoard];
-                                for (let y = 0; y < BOARD_SIZE; y++) for (let x = 0; x < BOARD_SIZE; x++) {
-                                    if (rowsToClear.has(y) || colsToClear.has(x)) clearedBoard[y * BOARD_SIZE + x] = 0;
+                                for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+                                    if (rowsToClear.has(y) || colsToClear.has(x)) clearedBoard[y * size + x] = 0;
                                 }
                                 const freshP1 = freshIfStuck(nextP1, clearedBoard, newLevel, mods);
                                 const freshP2 = freshIfStuck(nextP2, clearedBoard, newLevel, mods);
@@ -829,9 +839,10 @@ public class TetrisServer {
                     const handleGlobalPointerMove = (e) => {
                         if (!dragData) return;
                         let newDragData = { ...dragData, clientX: e.clientX, clientY: e.clientY };
-                        if (gridRef.current) {
+                        if (gridRef.current && gameState) {
                             const rect = gridRef.current.getBoundingClientRect();
-                            const cellW = rect.width / BOARD_SIZE; const cellH = rect.height / BOARD_SIZE;
+                            const size = gameState.boardSize || BOARD_SIZE;
+                            const cellW = rect.width / size; const cellH = rect.height / size;
                             newDragData.boardRect = rect; newDragData.cellW = cellW; newDragData.cellH = cellH;
                             
                             const touchOffsetY = dragData.pointerType === 'touch' ? 80 : 0; 
@@ -840,7 +851,7 @@ public class TetrisServer {
 
                             const isNearBoard = pieceX >= rect.left - 40 && pieceX <= rect.right + 40 && pieceY >= rect.top - 40 && pieceY <= rect.bottom + 40;
 
-                            if (isNearBoard && gridX >= -2 && gridX <= BOARD_SIZE + 2 && gridY >= -2 && gridY <= BOARD_SIZE + 2) {
+                            if (isNearBoard && gridX >= -2 && gridX <= size + 2 && gridY >= -2 && gridY <= size + 2) {
                                 setHoverCell({ x: gridX, y: gridY });
                                 const cellId = `${gridX},${gridY}`;
                                 if (lastHoverRef.current !== cellId) { lastHoverRef.current = cellId; vibrate(5); }
@@ -928,7 +939,7 @@ public class TetrisServer {
                                         <div className={`${cardCls} bg-gradient-to-r from-emerald-600 to-teal-700 border-emerald-500/30 text-white cursor-default`}>
                                             <div className="flex items-center justify-between mb-1"><span className="text-lg">Solo</span><span className="text-xs font-bold opacity-90">Recorde {soloHighScore}</span></div>
                                             <div className="text-xs font-medium opacity-80 mb-3">Dificuldade: <span className="font-black">{SOLO_DIFFICULTIES[soloDifficulty]?.name || 'Normal'}</span></div>
-                                            <div className="grid grid-cols-4 gap-1 mb-2">
+                                            <div className="grid grid-cols-5 gap-1 mb-2">
                                                 {Object.entries(SOLO_DIFFICULTIES).map(([key, d]) => (
                                                     <button key={key} onClick={() => setSoloDifficulty(key)}
                                                         className={`text-[10px] py-1.5 rounded-lg font-bold border ${soloDifficulty === key ? 'bg-white/20 border-white/40' : 'bg-black/20 border-white/10 opacity-60'}`}>{d.name}</button>
@@ -944,6 +955,7 @@ public class TetrisServer {
                                 </div>
                                 <div className="mt-3 flex gap-2 justify-center w-full max-w-sm">
                                     {[
+                                        { key: 'random', label: '🎲', title: 'Aleatório' },
                                         { key: 'default', label: '◆', title: 'Padrão' },
                                         { key: 'candy', label: '🍭', title: 'Doce' },
                                         { key: 'stone', label: '🪨', title: 'Pedra' },
@@ -1032,9 +1044,10 @@ public class TetrisServer {
                             </div>
 
                             <div className="flex-1 flex flex-col items-center justify-center pt-24 pb-6 px-2 z-10 w-full max-w-4xl mx-auto h-full">
-                                <div ref={gridRef} className={`grid gap-[2px] p-2 bg-gray-900/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] select-none touch-none border border-gray-700/60 mb-auto mt-auto ${boardShake ? 'animate-board-shake' : ''}`} style={{ gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))` }}>
+                                <div ref={gridRef} className={`grid gap-[2px] p-2 bg-gray-900/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] select-none touch-none border border-gray-700/60 mb-auto mt-auto ${boardShake ? 'animate-board-shake' : ''}`} style={{ gridTemplateColumns: `repeat(${gameState.boardSize || BOARD_SIZE}, minmax(0, 1fr))` }}>
                                     {gameState.board.map((cellValue, index) => {
-                                        const x = index % BOARD_SIZE; const y = Math.floor(index / BOARD_SIZE);
+                                        const size = gameState.boardSize || BOARD_SIZE;
+                                        const x = index % size; const y = Math.floor(index / size);
                                         const inClearingRow = gameState.clearingLines?.rows?.includes(y);
                                         const inClearingCol = gameState.clearingLines?.cols?.includes(x);
                                         const inExplosion = gameState.explosionArea?.some(c => c.x === x && c.y === y);
@@ -1082,8 +1095,9 @@ public class TetrisServer {
                                         </div>
                                         <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 mb-6">
                                             <span className="text-xs font-bold uppercase text-gray-400 mb-3 block">Textura dos Blocos</span>
-                                            <div className="grid grid-cols-5 gap-2">
+                                            <div className="grid grid-cols-6 gap-2">
                                                 {[
+                                                    { key: 'random', label: '🎲', title: 'Aleatório' },
                                                     { key: 'default', label: '◆', title: 'Padrão' },
                                                     { key: 'candy', label: '🍭', title: 'Doce' },
                                                     { key: 'stone', label: '🪨', title: 'Pedra' },
