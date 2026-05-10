@@ -1,9 +1,11 @@
 import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpExchange;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executors;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.io.OutputStream;
 import java.io.InputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,6 +22,30 @@ public class TetrisServer {
             Files.writeString(STATE_FILE, state,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception ignored) {}
+    }
+
+    private static final Path PUBLIC_DIR = Path.of("public");
+
+    private static String readStaticFile(String filename) {
+        try {
+            return Files.readString(PUBLIC_DIR.resolve(filename));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static void serveStatic(HttpExchange exchange, String filename, String contentType) throws IOException {
+        String content = readStaticFile(filename);
+        if (content == null) {
+            exchange.sendResponseHeaders(404, -1);
+            return;
+        }
+        byte[] response = content.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", contentType);
+        exchange.sendResponseHeaders(200, response.length);
+        try (var os = exchange.getResponseBody()) {
+            os.write(response);
+        }
     }
 
     public static void main(String[] args) throws Exception {
