@@ -48,6 +48,19 @@ public class TetrisServer {
         }
     }
 
+    private static void handleRoot(HttpExchange exchange) throws IOException {
+        String html = readStaticFile("index.html");
+        if (html == null) {
+            html = HTML_CONTENT;
+        }
+        byte[] response = html.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+        exchange.sendResponseHeaders(200, response.length);
+        try (var os = exchange.getResponseBody()) {
+            os.write(response);
+        }
+    }
+
     private static void handleEvents(HttpExchange exchange) throws IOException {
         exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
         exchange.getResponseHeaders().set("Cache-Control", "no-cache");
@@ -167,14 +180,9 @@ public class TetrisServer {
         var server = HttpServer.create(new InetSocketAddress(3001), 0);
 
         // 1. Rota Frontend (Single Page Application)
-        server.createContext("/", exchange -> {
-            byte[] response = HTML_CONTENT.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
-            exchange.sendResponseHeaders(200, response.length);
-            try (var os = exchange.getResponseBody()) {
-                os.write(response);
-            }
-        });
+        server.createContext("/", TetrisServer::handleRoot);
+        server.createContext("/style.css", exchange -> serveStatic(exchange, "style.css", "text/css"));
+        server.createContext("/app.js", exchange -> serveStatic(exchange, "app.js", "application/javascript"));
 
         server.createContext("/events", TetrisServer::handleEvents);
 
