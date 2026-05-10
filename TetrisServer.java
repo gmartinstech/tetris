@@ -1,8 +1,17 @@
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpExchange;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URLDecoder;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import java.io.OutputStream;
 import java.io.InputStream;
 import java.io.IOException;
@@ -13,15 +22,72 @@ import java.nio.file.StandardOpenOption;
 
 public class TetrisServer {
 
-    private static volatile String globalGameState = null;
-    private static final CopyOnWriteArrayList<OutputStream> sseClients = new CopyOnWriteArrayList<>();
-    private static final Path STATE_FILE = Path.of("gamestate.json");
+    private static final long ROOM_TTL_MS = 24L * 60 * 60 * 1000;
+    private static final Pattern SLUG_RE = Pattern.compile("^[a-z0-9-]{3,50}$");
+    private static final ConcurrentHashMap<String, Room> rooms = new ConcurrentHashMap<>();
 
-    private static void persistState(String state) {
+    private static final String[] ADJ = {"happy","blue","red","fast","quiet","brave","silly","wise","calm","fierce","tiny","big","gold","silver","lucky","wild","sleepy","sunny","misty","royal","jolly","clever","mighty","gentle","cosmic","electric","velvet","crimson","golden","silent"};
+    private static final String[] NOUN = {"fox","bear","wolf","eagle","tiger","dragon","cat","panda","whale","owl","raven","lion","seal","deer","hawk","koala","otter","mouse","frog","duck","pixel","bishop","rook","comet","nova","echo","crane","fern","ember","quartz"};
+
+    static class Room {
+        volatile String state;
+        final CopyOnWriteArrayList<OutputStream> sseClients = new CopyOnWriteArrayList<>();
+        final AtomicLong lastActivity = new AtomicLong(System.currentTimeMillis());
+        void touch() { lastActivity.set(System.currentTimeMillis()); }
+    }
+
+    private static Path roomFile(String slug) { return Path.of("room_" + slug + ".json"); }
+
+    private static void persistRoom(String slug, String state) {
         try {
-            Files.writeString(STATE_FILE, state,
+            Files.writeString(roomFile(slug), state,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception ignored) {}
+    }
+
+    private static void deleteRoomFile(String slug) {
+        try { Files.deleteIfExists(roomFile(slug)); } catch (Exception ignored) {}
+    }
+
+    private static String slugify(String raw) {
+        if (raw == null) return null;
+        String s = raw.toLowerCase().trim()
+            .replaceAll("[^a-z0-9-]+", "-")
+            .replaceAll("-+", "-")
+            .replaceAll("^-+|-+$", "");
+        return SLUG_RE.matcher(s).matches() ? s : null;
+    }
+
+    private static String autoSlug() {
+        var rnd = ThreadLocalRandom.current();
+        for (int i = 0; i < 50; i++) {
+            String s = ADJ[rnd.nextInt(ADJ.length)] + "-" + NOUN[rnd.nextInt(NOUN.length)] + "-" + (rnd.nextInt(90) + 10);
+            if (!rooms.containsKey(s)) return s;
+        }
+        return "room-" + System.currentTimeMillis() % 100000;
+    }
+
+    private static String queryParam(URI uri, String name) {
+        String q = uri.getRawQuery();
+        if (q == null) return null;
+        for (String p : q.split("&")) {
+            int eq = p.indexOf('=');
+            if (eq > 0 && p.substring(0, eq).equals(name)) {
+                return URLDecoder.decode(p.substring(eq + 1), StandardCharsets.UTF_8);
+            }
+        }
+        return null;
+    }
+
+    private static String jsonString(String s) {
+        StringBuilder sb = new StringBuilder("\"");
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '"' || c == '\\') sb.append('\\').append(c);
+            else if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+            else sb.append(c);
+        }
+        return sb.append('"').toString();
     }
 
     private static final Path PUBLIC_DIR = Path.of("public");
@@ -62,6 +128,16 @@ public class TetrisServer {
     }
 
     private static void handleEvents(HttpExchange exchange) throws IOException {
+        String slug = queryParam(exchange.getRequestURI(), "room");
+        if (slug == null || !SLUG_RE.matcher(slug).matches()) {
+            exchange.sendResponseHeaders(400, -1);
+            return;
+        }
+        Room room = rooms.get(slug);
+        if (room == null) {
+            exchange.sendResponseHeaders(404, -1);
+            return;
+        }
         exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
         exchange.getResponseHeaders().set("Cache-Control", "no-cache");
         exchange.getResponseHeaders().set("Connection", "keep-alive");
@@ -69,11 +145,12 @@ public class TetrisServer {
         exchange.sendResponseHeaders(200, 0);
 
         OutputStream os = exchange.getResponseBody();
-        sseClients.add(os);
+        room.sseClients.add(os);
+        room.touch();
 
         try {
-            if (globalGameState != null) {
-                os.write(("data: " + globalGameState + "\n\n").getBytes(StandardCharsets.UTF_8));
+            if (room.state != null) {
+                os.write(("data: " + room.state + "\n\n").getBytes(StandardCharsets.UTF_8));
                 os.flush();
             }
             while (!Thread.currentThread().isInterrupted()) {
@@ -84,7 +161,7 @@ public class TetrisServer {
         } catch (Exception e) {
             // Client disconnected
         } finally {
-            sseClients.remove(os);
+            room.sseClients.remove(os);
             try { os.close(); } catch (Exception ignored) {}
         }
     }
@@ -98,16 +175,161 @@ public class TetrisServer {
         }
 
         if ("POST".equals(exchange.getRequestMethod())) {
+            String slug = queryParam(exchange.getRequestURI(), "room");
+            if (slug == null || !SLUG_RE.matcher(slug).matches()) {
+                exchange.sendResponseHeaders(400, -1);
+                return;
+            }
+            Room room = rooms.get(slug);
+            if (room == null) {
+                exchange.sendResponseHeaders(404, -1);
+                return;
+            }
             try (InputStream is = exchange.getRequestBody()) {
-                globalGameState = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                persistState(globalGameState);
-                broadcast(globalGameState);
+                String body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                if (body.length() > 200_000) {
+                    exchange.sendResponseHeaders(413, -1);
+                    return;
+                }
+                room.state = body;
+                room.touch();
+                persistRoom(slug, body);
+                broadcastRoom(room, body);
             }
             exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
             exchange.sendResponseHeaders(200, -1);
         } else {
             exchange.sendResponseHeaders(405, -1);
         }
+    }
+
+    private static void handleRoomCreate(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        if ("OPTIONS".equals(exchange.getRequestMethod())) {
+            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "POST, OPTIONS");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+            exchange.sendResponseHeaders(204, -1);
+            return;
+        }
+        if (!"POST".equals(exchange.getRequestMethod())) {
+            exchange.sendResponseHeaders(405, -1);
+            return;
+        }
+        String body;
+        try (InputStream is = exchange.getRequestBody()) {
+            body = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        String desired = null;
+        int idx = body.indexOf("\"name\"");
+        if (idx >= 0) {
+            int q1 = body.indexOf('"', body.indexOf(':', idx) + 1);
+            int q2 = q1 >= 0 ? body.indexOf('"', q1 + 1) : -1;
+            if (q1 >= 0 && q2 > q1) desired = body.substring(q1 + 1, q2);
+        }
+        String slug;
+        if (desired != null && !desired.isBlank()) {
+            slug = slugify(desired);
+            if (slug == null) {
+                exchange.sendResponseHeaders(400, -1);
+                return;
+            }
+            if (rooms.containsKey(slug)) {
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                String json = "{\"slug\":" + jsonString(slug) + ",\"existed\":true}";
+                byte[] data = json.getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, data.length);
+                try (var os = exchange.getResponseBody()) { os.write(data); }
+                return;
+            }
+        } else {
+            slug = autoSlug();
+        }
+        rooms.computeIfAbsent(slug, k -> new Room());
+        String json = "{\"slug\":" + jsonString(slug) + ",\"existed\":false}";
+        byte[] data = json.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(200, data.length);
+        try (var os = exchange.getResponseBody()) { os.write(data); }
+    }
+
+    private static void handleRoomGet(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        String path = exchange.getRequestURI().getPath();
+        String slug = path.substring("/room/".length());
+        if (!SLUG_RE.matcher(slug).matches()) {
+            exchange.sendResponseHeaders(400, -1);
+            return;
+        }
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            exchange.sendResponseHeaders(405, -1);
+            return;
+        }
+        Room room = rooms.get(slug);
+        if (room == null) {
+            exchange.sendResponseHeaders(404, -1);
+            return;
+        }
+        room.touch();
+        String state = room.state != null ? room.state : "null";
+        byte[] data = state.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(200, data.length);
+        try (var os = exchange.getResponseBody()) { os.write(data); }
+    }
+
+    private static void broadcastRoom(Room room, String state) {
+        byte[] data = ("data: " + state + "\n\n").getBytes(StandardCharsets.UTF_8);
+        for (OutputStream os : room.sseClients) {
+            try { os.write(data); os.flush(); }
+            catch (Exception e) { room.sseClients.remove(os); }
+        }
+    }
+
+    private static void sweepStaleRooms() {
+        long cutoff = System.currentTimeMillis() - ROOM_TTL_MS;
+        for (var entry : rooms.entrySet()) {
+            Room r = entry.getValue();
+            if (r.lastActivity.get() < cutoff && r.sseClients.isEmpty()) {
+                rooms.remove(entry.getKey());
+                deleteRoomFile(entry.getKey());
+            }
+        }
+    }
+
+    private static void loadRoomsFromDisk() {
+        try (Stream<Path> paths = Files.list(Path.of("."))) {
+            paths.filter(p -> {
+                String n = p.getFileName().toString();
+                return n.startsWith("room_") && n.endsWith(".json");
+            }).forEach(p -> {
+                String name = p.getFileName().toString();
+                String slug = name.substring(5, name.length() - 5);
+                if (!SLUG_RE.matcher(slug).matches()) return;
+                try {
+                    String state = Files.readString(p);
+                    Room r = new Room();
+                    r.state = state;
+                    rooms.put(slug, r);
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
+    }
+
+    private static void migrateLegacyState() {
+        Path legacy = Path.of("gamestate.json");
+        if (!Files.exists(legacy)) return;
+        String slug = "gabriel-ana";
+        Path target = roomFile(slug);
+        try {
+            if (!Files.exists(target)) {
+                Files.copy(legacy, target);
+            }
+            if (!rooms.containsKey(slug)) {
+                Room r = new Room();
+                r.state = Files.readString(target);
+                rooms.put(slug, r);
+            }
+        } catch (Exception ignored) {}
     }
 
     private static void handleCareer(HttpExchange exchange) throws IOException {
@@ -173,9 +395,8 @@ public class TetrisServer {
     }
 
     public static void main(String[] args) throws Exception {
-        if (Files.exists(STATE_FILE)) {
-            try { globalGameState = Files.readString(STATE_FILE); } catch (Exception ignored) {}
-        }
+        loadRoomsFromDisk();
+        migrateLegacyState();
 
         var server = HttpServer.create(new InetSocketAddress(3001), 0);
 
@@ -185,37 +406,31 @@ public class TetrisServer {
         server.createContext("/app.js", exchange -> serveStatic(exchange, "app.js", "application/javascript"));
 
         server.createContext("/events", TetrisServer::handleEvents);
-
         server.createContext("/action", TetrisServer::handleAction);
+        server.createContext("/room/create", TetrisServer::handleRoomCreate);
+        server.createContext("/room/", TetrisServer::handleRoomGet);
 
         server.createContext("/career/", TetrisServer::handleCareer);
-
         server.createContext("/version", TetrisServer::handleVersion);
 
         // Delega a concorrência para as Virtual Threads (Project Loom)
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
-        
+
+        ScheduledExecutorService sweeper = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "room-ttl-sweeper");
+            t.setDaemon(true);
+            return t;
+        });
+        sweeper.scheduleAtFixedRate(TetrisServer::sweepStaleRooms, 1, 60, TimeUnit.MINUTES);
+
         System.out.println("\n=======================================================");
         System.out.println("🚀 TETRIS CO-OP SERVER (NATIVO)");
         System.out.println("⚡ Engine: Java Virtual Threads + Server-Sent Events");
         System.out.println("📦 Zero Dependências externas (Sem Jbang/Javalin)");
+        System.out.println("🏠 Salas carregadas: " + rooms.size());
         System.out.println("🔗 Host Local: http://localhost:3001");
-        System.out.println("📱 Para a Ana jogar, acesse o IP da sua máquina (ex: http://192.168.1.X:3001)");
         System.out.println("=======================================================\n");
-    }
-
-    // Função de varredura para atualizar as telas
-    private static void broadcast(String state) {
-        byte[] data = ("data: " + state + "\n\n").getBytes(StandardCharsets.UTF_8);
-        for (OutputStream os : sseClients) {
-            try {
-                os.write(data);
-                os.flush();
-            } catch (Exception e) {
-                sseClients.remove(os); // Limpa conexões inativas ou mortas
-            }
-        }
     }
 
     // ====================================================================================

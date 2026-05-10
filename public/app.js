@@ -265,6 +265,29 @@ function App() {
     useEffect(() => { localStorage.setItem('tetris_solo_diff', soloDifficulty); }, [soloDifficulty]);
     const [coopBoardSize, setCoopBoardSize] = useState(() => parseInt(localStorage.getItem('tetris_coop_size') || '10'));
     useEffect(() => { localStorage.setItem('tetris_coop_size', String(coopBoardSize)); }, [coopBoardSize]);
+    const [coopRoom, setCoopRoom] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('room') || null;
+    });
+    useEffect(() => {
+        const onPop = () => {
+            const params = new URLSearchParams(window.location.search);
+            setCoopRoom(params.get('room') || null);
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+    }, []);
+    const setRoomInUrl = (slug) => {
+        const url = new URL(window.location.href);
+        if (slug) url.searchParams.set('room', slug);
+        else url.searchParams.delete('room');
+        window.history.replaceState({}, '', url);
+        setCoopRoom(slug);
+    };
+    const [roomCreateName, setRoomCreateName] = useState('');
+    const [roomCreateError, setRoomCreateError] = useState('');
+    const [roomCreating, setRoomCreating] = useState(false);
+    const [shareCopied, setShareCopied] = useState(false);
     const gridRef = useRef(null);
     const lastHoverRef = useRef(null);
     const [dragData, setDragData] = useState(null);
@@ -287,24 +310,35 @@ function App() {
         else document.exitFullscreen();
     };
 
-    // --- SSE (Server-Sent Events) Setup — only co-op ---
+    // --- SSE (Server-Sent Events) Setup — only co-op, scoped to room ---
     useEffect(() => {
-        if (mode !== 'coop') return;
+        if (mode !== 'coop' || !coopRoom) return;
         let es;
-        const connectSSE = () => {
-            es = new EventSource('events');
-            es.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                setGameState(data);
-                if (data.p1 && data.p1.uid === userId) setPlayerRole('p1');
-                else if (data.p2 && data.p2.uid === userId) setPlayerRole('p2');
-                else setPlayerRole(null);
+        let cancelled = false;
+        // Pre-flight: check room exists before subscribing
+        fetch(`room/${encodeURIComponent(coopRoom)}`).then(res => {
+            if (cancelled) return;
+            if (res.status === 404) {
+                setRoomCreateError(`Sala "${coopRoom}" não encontrada (expirada ou inexistente)`);
+                setRoomInUrl(null);
+                return;
+            }
+            const connectSSE = () => {
+                if (cancelled) return;
+                es = new EventSource(`events?room=${encodeURIComponent(coopRoom)}`);
+                es.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    setGameState(data);
+                    if (data.p1 && data.p1.uid === userId) setPlayerRole('p1');
+                    else if (data.p2 && data.p2.uid === userId) setPlayerRole('p2');
+                    else setPlayerRole(null);
+                };
+                es.onerror = () => { es.close(); setTimeout(connectSSE, 1000); };
             };
-            es.onerror = () => { es.close(); setTimeout(connectSSE, 1000); };
-        };
-        connectSSE();
-        return () => { if(es) es.close(); };
-    }, [userId, mode]);
+            connectSSE();
+        }).catch(() => {});
+        return () => { cancelled = true; if(es) es.close(); };
+    }, [userId, mode, coopRoom]);
 
     // Auto-reconnect: if co-op state already has our uid, restore role
     useEffect(() => {
@@ -382,6 +416,45 @@ function App() {
     const goToMenu = () => {
         setMode('menu'); setGameState(null); setPlayerRole(null); setActiveStage(null);
         setStagePieceCount(0); setStageResult(null); setShowDashboard(false);
+        setRoomInUrl(null); setRoomCreateName(''); setRoomCreateError(''); setShareCopied(false);
+    };
+
+    const createRoom = async (name) => {
+        setRoomCreating(true); setRoomCreateError('');
+        try {
+            const res = await fetch('room/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(name ? { name } : {})
+            });
+            if (!res.ok) { setRoomCreateError(res.status === 400 ? 'Nome inválido (use 3-50 letras minúsculas, números, traço)' : `Erro ${res.status}`); return; }
+            const data = await res.json();
+            setRoomInUrl(data.slug);
+            setGameState(null); setPlayerRole(null);
+        } catch (e) {
+            setRoomCreateError('Falha de rede');
+        } finally {
+            setRoomCreating(false);
+        }
+    };
+
+    const shareLink = () => {
+        if (!coopRoom) return;
+        const url = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(coopRoom)}`;
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(url).then(() => {
+                setShareCopied(true);
+                setTimeout(() => setShareCopied(false), 1800);
+            }).catch(() => {});
+        } else {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = url; document.body.appendChild(ta);
+                ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                setShareCopied(true);
+                setTimeout(() => setShareCopied(false), 1800);
+            } catch (e) {}
+        }
     };
 
     const startStage = (stage) => {
@@ -415,8 +488,8 @@ function App() {
     // --- State sync: co-op broadcasts to server, solo/career stays local ---
     const syncState = (newState) => {
         setGameState(newState);
-        if (mode === 'coop') {
-            fetch('action', {
+        if (mode === 'coop' && coopRoom) {
+            fetch(`action?room=${encodeURIComponent(coopRoom)}`, {
                 method: 'POST',
                 body: JSON.stringify(newState),
                 headers: { 'Content-Type': 'application/json' }
@@ -764,6 +837,35 @@ function App() {
         );
     }
 
+    // Co-op room landing — no room slug in URL, user creates or auto-generates
+    if (mode === 'coop' && !coopRoom) {
+        return (
+            <div className="flex flex-col h-screen items-center justify-center text-gray-200 p-4 font-sans bg-[#030712]">
+                <div className="bg-gray-900/60 backdrop-blur-2xl border border-gray-800 p-8 rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] max-w-sm w-full text-center">
+                    <div className="text-blue-500 mb-4 flex justify-center drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]"><IconLayers /></div>
+                    <h1 className="text-3xl font-black mb-1 tracking-tight">Criar sala</h1>
+                    <p className="text-gray-400 mb-6 text-sm font-medium uppercase tracking-widest">Compartilhe o link com um amigo</p>
+                    <div className="space-y-3">
+                        <input type="text" value={roomCreateName} onChange={(e) => setRoomCreateName(e.target.value)}
+                            placeholder="nome-da-sala (opcional)"
+                            maxLength={50}
+                            className="w-full px-4 py-3 bg-gray-800/80 border border-gray-700 rounded-xl text-white text-sm font-mono focus:outline-none focus:border-blue-500" />
+                        {roomCreateError && <div className="text-xs text-red-400 font-bold">{roomCreateError}</div>}
+                        <button onClick={() => createRoom(roomCreateName.trim())} disabled={roomCreating}
+                            className="w-full py-4 bg-gradient-to-r from-blue-600 to-cyan-700 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1 disabled:opacity-50">
+                            {roomCreating ? 'Criando...' : (roomCreateName.trim() ? 'Criar com este nome' : 'Criar sala')}
+                        </button>
+                        <button onClick={() => { setRoomCreateName(''); createRoom(''); }} disabled={roomCreating}
+                            className="w-full py-3 bg-gray-800/80 text-gray-300 rounded-2xl font-bold border border-gray-700 hover:bg-gray-700 disabled:opacity-50">
+                            ⚡ Gerar nome aleatório
+                        </button>
+                        <button onClick={goToMenu} className="w-full py-3 text-gray-400 hover:text-white text-sm font-bold">← Voltar ao menu</button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     // Co-op join screen — render before loading guard so first player can create the room
     if (mode === 'coop' && !playerRole) {
         const noPlayers = !gameState || (!gameState.p1 && !gameState.p2);
@@ -773,7 +875,11 @@ function App() {
                 <div className="bg-gray-900/60 backdrop-blur-2xl border border-gray-800 p-8 rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] max-w-sm w-full text-center">
                     <div className="text-blue-500 mb-6 flex justify-center drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]"><IconLayers /></div>
                     <h1 className="text-3xl font-black mb-1 tracking-tight">Tetris Co-op</h1>
-                    <p className="text-gray-400 mb-6 text-sm font-medium uppercase tracking-widest">Escolha seu personagem</p>
+                    <p className="text-gray-400 mb-3 text-sm font-medium uppercase tracking-widest">Escolha seu personagem</p>
+                    <div className="mb-4 flex items-center justify-center gap-2 text-[11px] font-mono text-blue-300">
+                        <span className="px-2 py-1 bg-blue-900/30 rounded-full border border-blue-800/50">sala: {coopRoom}</span>
+                        <button onClick={shareLink} className="px-2 py-1 bg-gray-800 text-gray-300 rounded-full border border-gray-700 font-bold text-[10px] hover:bg-gray-700">{shareCopied ? '✓ copiado' : '📋 link'}</button>
+                    </div>
                     {noPlayers ? (
                         <div className="mb-6">
                             <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Tamanho do tabuleiro</div>
@@ -790,8 +896,8 @@ function App() {
                         <div className="mb-4 text-xs text-gray-500 font-bold uppercase tracking-widest">Sala ativa · {existingSize}×{existingSize}</div>
                     )}
                     <div className="space-y-4">
-                        {!gameState?.p1 ? <button onClick={() => joinGame('p1', 'Gabriel')} className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Gabriel</button> : <div className="p-4 bg-blue-900/20 text-blue-400 rounded-2xl text-sm font-bold border border-blue-900/50">Gabriel conectado</div>}
-                        {!gameState?.p2 ? <button onClick={() => joinGame('p2', 'Ana')} className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Ana</button> : <div className="p-4 bg-purple-900/20 text-purple-400 rounded-2xl text-sm font-bold border border-purple-900/50">Ana conectada</div>}
+                        {!gameState?.p1 ? <button onClick={() => joinGame('p1', 'Jogador 1')} className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Jogador 1</button> : <div className="p-4 bg-blue-900/20 text-blue-400 rounded-2xl text-sm font-bold border border-blue-900/50">Jogador 1 conectado</div>}
+                        {!gameState?.p2 ? <button onClick={() => joinGame('p2', 'Jogador 2')} className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Jogador 2</button> : <div className="p-4 bg-purple-900/20 text-purple-400 rounded-2xl text-sm font-bold border border-purple-900/50">Jogador 2 conectado</div>}
                         <button onClick={goToMenu} className="w-full py-3 text-gray-400 hover:text-white text-sm font-bold">← Voltar ao menu</button>
                     </div>
                 </div>
@@ -884,6 +990,15 @@ function App() {
                             </div>
                         </div>
                         <div className="mt-auto flex flex-col gap-4">
+                            {mode === 'coop' && coopRoom && (
+                                <div className="bg-gray-900 p-4 rounded-2xl border border-gray-800">
+                                    <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Sala</div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="font-mono text-blue-300 text-sm truncate">{coopRoom}</span>
+                                        <button onClick={shareLink} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold whitespace-nowrap hover:bg-blue-500">{shareCopied ? '✓ copiado' : '📋 link'}</button>
+                                    </div>
+                                </div>
+                            )}
                             <button onClick={resetGame} className="w-full py-4 bg-red-500/10 text-red-500 rounded-xl font-bold border border-red-500/20 flex items-center justify-center gap-2"><IconRefresh /> Resetar Matriz</button>
                             {mode === 'coop' && <button onClick={leaveGame} className="w-full py-4 text-gray-400 hover:text-white hover:bg-gray-900 rounded-xl font-bold flex items-center justify-center gap-2 border border-transparent"><IconLogOut /> Abandonar Sala</button>}
                             <button onClick={goToMenu} className="w-full py-4 text-gray-400 hover:text-white hover:bg-gray-900 rounded-xl font-bold flex items-center justify-center gap-2 border border-transparent"><IconLogOut /> Voltar ao menu</button>

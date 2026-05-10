@@ -1,5 +1,6 @@
 *.log
 gamestate.json
 career_*.json
+room_*.json
 .worktrees/
 *.class
