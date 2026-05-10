@@ -18,31 +18,63 @@ body { overflow: hidden; touch-action: none; background-color: #030712; }
 /* ---- Block textures ---- */
 .block-render { position: relative; }
 .block-render[data-tex="candy"] {
-    background: radial-gradient(ellipse at 30% 30%, rgba(255,255,255,0.45) 0%, transparent 50%),
-                repeating-conic-gradient(var(--c-from) 0% 12%, var(--c-to) 12% 24%) !important;
-    box-shadow: inset 2px 2px 6px rgba(255,255,255,0.45), inset -2px -2px 6px rgba(0,0,0,0.4) !important;
+    background:
+        radial-gradient(ellipse at 28% 22%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.35) 18%, transparent 42%),
+        radial-gradient(ellipse at 75% 80%, rgba(255,255,255,0.25) 0%, transparent 40%),
+        repeating-conic-gradient(from 35deg at 50% 50%, var(--c-from) 0deg 30deg, var(--c-to) 30deg 60deg) !important;
+    box-shadow:
+        inset 0 0 0 2px rgba(255,255,255,0.25),
+        inset 4px 4px 10px rgba(255,255,255,0.55),
+        inset -5px -6px 12px rgba(0,0,0,0.45),
+        inset 0 0 18px rgba(255,255,255,0.15) !important;
 }
 .block-render[data-tex="stone"] {
-    background: radial-gradient(circle at 25% 25%, rgba(255,255,255,0.12) 0%, transparent 35%),
-                radial-gradient(circle at 75% 75%, rgba(0,0,0,0.2) 0%, transparent 35%),
-                repeating-linear-gradient(45deg, transparent 0px, transparent 2px, rgba(255,255,255,0.04) 2px, rgba(255,255,255,0.04) 3px),
-                linear-gradient(160deg, var(--c-from) 0%, var(--c-to) 100%) !important;
-    box-shadow: inset 1px 1px 3px rgba(255,255,255,0.25), inset -2px -2px 5px rgba(0,0,0,0.5) !important;
+    background:
+        radial-gradient(ellipse 18% 12% at 22% 30%, rgba(0,0,0,0.45) 0%, transparent 70%),
+        radial-gradient(ellipse 14% 22% at 68% 18%, rgba(0,0,0,0.38) 0%, transparent 65%),
+        radial-gradient(circle at 80% 62%, rgba(0,0,0,0.5) 0%, transparent 18%),
+        radial-gradient(circle at 38% 72%, rgba(0,0,0,0.42) 0%, transparent 14%),
+        radial-gradient(circle at 55% 45%, rgba(255,255,255,0.18) 0%, transparent 12%),
+        radial-gradient(circle at 18% 80%, rgba(255,255,255,0.14) 0%, transparent 10%),
+        radial-gradient(ellipse 60% 40% at 30% 25%, rgba(255,255,255,0.22) 0%, transparent 60%),
+        radial-gradient(ellipse 70% 50% at 78% 82%, rgba(0,0,0,0.35) 0%, transparent 65%),
+        repeating-conic-gradient(from 27deg at 48% 52%, rgba(255,255,255,0.05) 0deg 8deg, rgba(0,0,0,0.07) 8deg 17deg, transparent 17deg 25deg),
+        repeating-linear-gradient(118deg, transparent 0 4px, rgba(0,0,0,0.06) 4px 5px, transparent 5px 9px, rgba(255,255,255,0.05) 9px 10px),
+        linear-gradient(155deg, var(--c-from) 0%, var(--c-to) 100%) !important;
+    box-shadow: inset 2px 2px 0 rgba(255,255,255,0.22), inset 3px 3px 8px rgba(255,255,255,0.12), inset -3px -3px 8px rgba(0,0,0,0.55), inset -1px -1px 0 rgba(0,0,0,0.4) !important;
 }
 .block-render[data-tex="metal"] {
-    background: repeating-linear-gradient(0deg, transparent 0px, rgba(255,255,255,0.07) 1px, transparent 2px),
-                repeating-linear-gradient(90deg, transparent 0px, rgba(0,0,0,0.06) 1px, transparent 3px),
-                linear-gradient(180deg, var(--c-from) 0%, var(--c-to) 100%) !important;
-    box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), inset 0 -1px 2px rgba(0,0,0,0.35) !important;
+    background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 1px, transparent 1px, transparent 3px),
+        repeating-linear-gradient(90deg, rgba(0,0,0,0.10) 0px, rgba(0,0,0,0.10) 1px, transparent 1px, transparent 5px),
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0px, rgba(255,255,255,0.04) 2px, transparent 2px, transparent 9px),
+        linear-gradient(180deg,
+            var(--c-from) 0%,
+            color-mix(in srgb, var(--c-from) 60%, white) 18%,
+            rgba(255,255,255,0.55) 24%,
+            var(--c-from) 32%,
+            var(--c-to) 70%,
+            color-mix(in srgb, var(--c-to) 70%, black) 100%) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.55),
+        inset 0 2px 6px rgba(255,255,255,0.25),
+        inset 0 -2px 4px rgba(0,0,0,0.5),
+        inset 0 -1px 0 rgba(0,0,0,0.6) !important;
 }
 .block-render[data-tex="glass"] {
-    background: radial-gradient(ellipse at 35% 25%, rgba(255,255,255,0.5) 0%, transparent 50%),
-                linear-gradient(170deg, rgba(255,255,255,0.2) 0%, transparent 45%),
-                linear-gradient(to bottom right, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
-                linear-gradient(to bottom right, var(--c-from), var(--c-to)) !important;
-    background-blend-mode: screen, normal, normal, normal !important;
-    box-shadow: inset 1px 1px 4px rgba(255,255,255,0.35), inset -2px -2px 5px rgba(0,0,0,0.25) !important;
-    border: 1px solid rgba(255,255,255,0.15) !important;
+    background:
+        radial-gradient(ellipse 55% 35% at 30% 22%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.35) 35%, transparent 65%),
+        radial-gradient(ellipse 18% 12% at 68% 18%, rgba(255,255,255,0.7) 0%, transparent 70%),
+        radial-gradient(ellipse 70% 50% at 75% 90%, rgba(255,255,255,0.18) 0%, transparent 60%),
+        linear-gradient(135deg, transparent 38%, rgba(255,255,255,0.12) 50%, transparent 62%),
+        linear-gradient(45deg, transparent 42%, rgba(255,255,255,0.08) 50%, transparent 58%),
+        linear-gradient(160deg, var(--c-from) 0%, var(--c-to) 100%) !important;
+    box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,0.25),
+        inset 2px 2px 6px rgba(255,255,255,0.45),
+        inset -3px -3px 8px rgba(0,0,0,0.3),
+        inset -1px -1px 12px rgba(255,255,255,0.15) !important;
+    border: 1px solid rgba(255,255,255,0.55) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -263,6 +263,8 @@ function App() {
     const [soloHighScore, setSoloHighScore] = useState(() => parseInt(localStorage.getItem('tetris_solo_hs') || '0'));
     const [soloDifficulty, setSoloDifficulty] = useState(() => localStorage.getItem('tetris_solo_diff') || 'normal');
     useEffect(() => { localStorage.setItem('tetris_solo_diff', soloDifficulty); }, [soloDifficulty]);
+    const [coopBoardSize, setCoopBoardSize] = useState(() => parseInt(localStorage.getItem('tetris_coop_size') || '10'));
+    useEffect(() => { localStorage.setItem('tetris_coop_size', String(coopBoardSize)); }, [coopBoardSize]);
     const gridRef = useRef(null);
     const lastHoverRef = useRef(null);
     const [dragData, setDragData] = useState(null);
@@ -423,9 +425,20 @@ function App() {
     };
 
     const joinGame = (role, name) => {
-        if (!gameState) return;
-        const mods = { ...(gameState.modifiers || {}), textureMode: blockTexture };
-        const newState = { ...gameState, [role]: { uid: userId, name: name, inventory: generateInventory(gameState.level, mods) } };
+        let baseState = gameState;
+        const noPlayers = !baseState || (!baseState.p1 && !baseState.p2);
+        if (noPlayers) {
+            const size = coopBoardSize;
+            const sizeMods = size <= 7 ? { maxBlocks: 4, banSpecials: true } : {};
+            baseState = {
+                board: generateComplexInitialBoard(size, 0),
+                p1: null, p2: null, score: 0, level: 1, lines: 0, status: 'playing',
+                clearingLines: { rows: [], cols: [] }, explosionArea: [],
+                modifiers: { ...sizeMods, textureMode: blockTexture }, density: 0, boardSize: size
+            };
+        }
+        const mods = { ...(baseState.modifiers || {}), textureMode: blockTexture };
+        const newState = { ...baseState, [role]: { uid: userId, name: name, inventory: generateInventory(baseState.level || 1, mods) } };
         syncState(newState);
     };
 
@@ -525,10 +538,10 @@ function App() {
                 setFloatingTexts(prev => [...prev, { id, text: `+${comboScore}`, x: dragData.clientX, y: dragData.clientY - 50 }]);
                 setTimeout(() => setFloatingTexts(prev => prev.filter(ft => ft.id !== id)), 1500);
             }
-            if (totalLinesCleared === 1) vibrate([60, 30, 60]);
-            else if (totalLinesCleared === 2) vibrate([80, 40, 80, 40, 80]);
-            else if (totalLinesCleared === 3) vibrate([100, 50, 100, 50, 100, 50, 100]);
-            else vibrate([120, 60, 120, 60, 120, 60, 120, 60, 120, 60, 120]);
+            if (totalLinesCleared === 1) vibrate([180]);
+            else if (totalLinesCleared === 2) vibrate([200, 80, 200]);
+            else if (totalLinesCleared === 3) vibrate([240, 80, 240, 80, 240]);
+            else vibrate([300, 100, 300, 100, 300, 100, 400]);
             if (totalLinesCleared >= 2) { setBoardShake(true); setTimeout(() => setBoardShake(false), 350); }
         }
 
@@ -751,26 +764,43 @@ function App() {
         );
     }
 
-    // --- Loading guards for co-op / solo / career-stage ---
-    if (!gameState) return <div className="flex h-screen items-center justify-center text-gray-400 font-sans bg-[#030712]">Carregando...</div>;
-
-    // Co-op join screen
+    // Co-op join screen — render before loading guard so first player can create the room
     if (mode === 'coop' && !playerRole) {
+        const noPlayers = !gameState || (!gameState.p1 && !gameState.p2);
+        const existingSize = gameState?.boardSize || 10;
         return (
             <div className="flex flex-col h-screen items-center justify-center text-gray-200 p-4 font-sans bg-[#030712]">
                 <div className="bg-gray-900/60 backdrop-blur-2xl border border-gray-800 p-8 rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] max-w-sm w-full text-center">
                     <div className="text-blue-500 mb-6 flex justify-center drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]"><IconLayers /></div>
                     <h1 className="text-3xl font-black mb-1 tracking-tight">Tetris Co-op</h1>
-                    <p className="text-gray-400 mb-8 text-sm font-medium uppercase tracking-widest">Escolha seu personagem</p>
+                    <p className="text-gray-400 mb-6 text-sm font-medium uppercase tracking-widest">Escolha seu personagem</p>
+                    {noPlayers ? (
+                        <div className="mb-6">
+                            <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Tamanho do tabuleiro</div>
+                            <div className="grid grid-cols-2 gap-2">
+                                {[7, 10].map(s => (
+                                    <button key={s} onClick={() => setCoopBoardSize(s)}
+                                        className={`py-3 rounded-xl font-black text-sm border transition-all ${coopBoardSize === s ? 'bg-blue-600 text-white border-blue-400 ring-1 ring-blue-400' : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'}`}>
+                                        {s}×{s}{s === 7 ? ' · simples' : ''}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="mb-4 text-xs text-gray-500 font-bold uppercase tracking-widest">Sala ativa · {existingSize}×{existingSize}</div>
+                    )}
                     <div className="space-y-4">
-                        {!gameState.p1 ? <button onClick={() => joinGame('p1', 'Gabriel')} className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Gabriel</button> : <div className="p-4 bg-blue-900/20 text-blue-400 rounded-2xl text-sm font-bold border border-blue-900/50">Gabriel conectado</div>}
-                        {!gameState.p2 ? <button onClick={() => joinGame('p2', 'Ana')} className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Ana</button> : <div className="p-4 bg-purple-900/20 text-purple-400 rounded-2xl text-sm font-bold border border-purple-900/50">Ana conectada</div>}
+                        {!gameState?.p1 ? <button onClick={() => joinGame('p1', 'Gabriel')} className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Gabriel</button> : <div className="p-4 bg-blue-900/20 text-blue-400 rounded-2xl text-sm font-bold border border-blue-900/50">Gabriel conectado</div>}
+                        {!gameState?.p2 ? <button onClick={() => joinGame('p2', 'Ana')} className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Ana</button> : <div className="p-4 bg-purple-900/20 text-purple-400 rounded-2xl text-sm font-bold border border-purple-900/50">Ana conectada</div>}
                         <button onClick={goToMenu} className="w-full py-3 text-gray-400 hover:text-white text-sm font-bold">← Voltar ao menu</button>
                     </div>
                 </div>
             </div>
         );
     }
+
+    // --- Loading guards for solo / career-stage ---
+    if (!gameState) return <div className="flex h-screen items-center justify-center text-gray-400 font-sans bg-[#030712]">Carregando...</div>;
 
     if (!playerRole) return <div className="flex h-screen items-center justify-center text-gray-400 font-sans bg-[#030712]">Carregando...</div>;
 
@@ -788,7 +818,7 @@ function App() {
             </div>
 
             <div className="flex-1 flex flex-col items-center justify-center pt-24 pb-6 px-2 z-10 w-full max-w-4xl mx-auto h-full">
-                <div ref={gridRef} className={`grid gap-[2px] p-2 bg-gray-900/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] select-none touch-none border border-gray-700/60 mb-auto mt-auto ${boardShake ? 'animate-board-shake' : ''}`} style={{ gridTemplateColumns: `repeat(${gameState.boardSize || BOARD_SIZE}, minmax(0, 1fr))` }}>
+                <div ref={gridRef} className={`grid gap-[2px] p-2 bg-gray-900/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] select-none touch-none border border-gray-700/60 mb-auto mt-auto ${boardShake ? 'animate-board-shake' : ''}`} style={{ gridTemplateColumns: `repeat(${gameState.boardSize || BOARD_SIZE}, minmax(0, 1fr))`, width: 'min(96vw, calc(100vh - 320px), 620px)', aspectRatio: '1 / 1' }}>
                     {gameState.board.map((cellValue, index) => {
                         const size = gameState.boardSize || BOARD_SIZE;
                         const x = index % size; const y = Math.floor(index / size);
@@ -797,7 +827,7 @@ function App() {
                         const inExplosion = gameState.explosionArea?.some(c => c.x === x && c.y === y);
                         const isDissolving = inClearingRow || inClearingCol || inExplosion;
                         const staggerDelay = inClearingRow ? x * 35 : (inClearingCol ? y * 35 : 0);
-                        return <div key={index} className="relative w-[8.5vw] h-[8.5vw] max-w-[42px] max-h-[42px] sm:max-w-[50px] sm:max-h-[50px] p-[1px]"><Block cellData={cellValue !== 0 ? cellValue : null} isDissolving={isDissolving} staggerDelay={staggerDelay} burst={inClearingRow || inClearingCol} /></div>;
+                        return <div key={index} className="relative aspect-square p-[1px]"><Block cellData={cellValue !== 0 ? cellValue : null} isDissolving={isDissolving} staggerDelay={staggerDelay} burst={inClearingRow || inClearingCol} /></div>;
                     })}
                 </div>
 
