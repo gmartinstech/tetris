@@ -818,7 +818,7 @@ function App() {
             </div>
 
             <div className="flex-1 flex flex-col items-center justify-center pt-24 pb-6 px-2 z-10 w-full max-w-4xl mx-auto h-full">
-                <div ref={gridRef} className={`grid gap-[2px] p-2 bg-gray-900/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] select-none touch-none border border-gray-700/60 mb-auto mt-auto ${boardShake ? 'animate-board-shake' : ''}`} style={{ gridTemplateColumns: `repeat(${gameState.boardSize || BOARD_SIZE}, minmax(0, 1fr))`, width: 'min(96vw, calc(100vh - 320px), 620px)', aspectRatio: '1 / 1' }}>
+                <div ref={gridRef} className={`grid gap-[2px] p-2 bg-gray-900/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] select-none touch-none border border-gray-700/60 mb-auto mt-auto ${boardShake ? 'animate-board-shake' : ''}`} style={{ gridTemplateColumns: `repeat(${gameState.boardSize || BOARD_SIZE}, minmax(0, 1fr))`, width: 'min(95vw, calc(100vh - 240px), 95vh, 620px)', aspectRatio: '1 / 1' }}>
                     {gameState.board.map((cellValue, index) => {
                         const size = gameState.boardSize || BOARD_SIZE;
                         const x = index % size; const y = Math.floor(index / size);
