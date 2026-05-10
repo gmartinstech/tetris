@@ -845,7 +845,7 @@ public class TetrisServer {
                             const cellW = rect.width / size; const cellH = rect.height / size;
                             newDragData.boardRect = rect; newDragData.cellW = cellW; newDragData.cellH = cellH;
                             
-                            const touchOffsetY = dragData.pointerType === 'touch' ? 80 : 0; 
+                            const touchOffsetY = dragData.pointerType === 'touch' ? 120 : 0; 
                             const pieceX = e.clientX - dragData.offsetX; const pieceY = e.clientY - dragData.offsetY - touchOffsetY;
                             const gridX = Math.round((pieceX - rect.left) / cellW); const gridY = Math.round((pieceY - rect.top) / cellH);
 
@@ -895,7 +895,7 @@ public class TetrisServer {
                         const gridW = maxX + 1; const gridH = maxY + 1;
 
                         const isSnapped = hoverCell !== null && dragData.boardRect;
-                        const touchOffsetY = dragData.pointerType === 'touch' && !isSnapped ? 80 : 0; 
+                        const touchOffsetY = dragData.pointerType === 'touch' && !isSnapped ? 120 : 0; 
                         
                         let left, top, cellSize;
                         if (isSnapped) {
