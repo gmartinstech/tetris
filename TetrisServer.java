@@ -207,6 +207,41 @@ public class TetrisServer {
                 .animate-line-burst { animation: line-burst 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
                 @keyframes board-shake { 0%,100% { transform: translateX(0); } 15% { transform: translateX(-3px) translateY(2px); } 30% { transform: translateX(3px) translateY(-1px); } 45% { transform: translateX(-2px) translateY(1px); } 60% { transform: translateX(2px) translateY(-2px); } 75% { transform: translateX(-1px); } }
                 .animate-board-shake { animation: board-shake 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+
+                /* ---- Block textures ---- */
+                .block-render { position: relative; }
+                /* Candy: conic swirl with glossy highlight */
+                [data-block-tex="candy"] .block-render {
+                    background: radial-gradient(ellipse at 30% 30%, rgba(255,255,255,0.45) 0%, transparent 50%),
+                                repeating-conic-gradient(var(--c-from) 0% 12%, var(--c-to) 12% 24%) !important;
+                    box-shadow: inset 2px 2px 6px rgba(255,255,255,0.45), inset -2px -2px 6px rgba(0,0,0,0.4) !important;
+                }
+                /* Stone: layered grainy rock */
+                [data-block-tex="stone"] .block-render {
+                    background: radial-gradient(circle at 25% 25%, rgba(255,255,255,0.12) 0%, transparent 35%),
+                                radial-gradient(circle at 75% 75%, rgba(0,0,0,0.2) 0%, transparent 35%),
+                                repeating-linear-gradient(45deg, transparent 0px, transparent 2px, rgba(255,255,255,0.04) 2px, rgba(255,255,255,0.04) 3px),
+                                linear-gradient(160deg, var(--c-from) 0%, var(--c-to) 100%) !important;
+                    box-shadow: inset 1px 1px 3px rgba(255,255,255,0.25), inset -2px -2px 5px rgba(0,0,0,0.5) !important;
+                }
+                /* Metal: brushed horizontal lines */
+                [data-block-tex="metal"] .block-render {
+                    background: repeating-linear-gradient(0deg, transparent 0px, rgba(255,255,255,0.07) 1px, transparent 2px),
+                                repeating-linear-gradient(90deg, transparent 0px, rgba(0,0,0,0.06) 1px, transparent 3px),
+                                linear-gradient(180deg, var(--c-from) 0%, var(--c-to) 100%) !important;
+                    box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), inset 0 -1px 2px rgba(0,0,0,0.35) !important;
+                }
+                /* Glass: crystal with reflections */
+                [data-block-tex="glass"] .block-render {
+                    background: radial-gradient(ellipse at 35% 25%, rgba(255,255,255,0.5) 0%, transparent 50%),
+                                linear-gradient(170deg, rgba(255,255,255,0.2) 0%, transparent 45%),
+                                linear-gradient(to bottom right, rgba(255,255,255,0.06), rgba(255,255,255,0.02)),
+                                linear-gradient(to bottom right, var(--c-from), var(--c-to)) !important;
+                    background-blend-mode: screen, normal, normal, normal !important;
+                    box-shadow: inset 1px 1px 4px rgba(255,255,255,0.35), inset -2px -2px 5px rgba(0,0,0,0.25) !important;
+                    border: 1px solid rgba(255,255,255,0.15) !important;
+                }
+
                 @media (prefers-reduced-motion: reduce) {
                     .animate-popIn, .animate-dissolve, .animate-floatUp, .animate-shimmer, .animate-bomb-pulse, .animate-line-burst, .animate-board-shake {
                         animation-duration: 0.01ms !important;
@@ -238,22 +273,41 @@ public class TetrisServer {
 
                 const vibrate = (pattern) => { if (navigator.vibrate) try { navigator.vibrate(pattern); } catch (e) {} };
 
+                const COLOR_MAP = {
+                    'from-red-400 to-red-600': ['#f87171', '#dc2626'],
+                    'from-blue-400 to-blue-600': ['#60a5fa', '#2563eb'],
+                    'from-green-400 to-green-600': ['#4ade80', '#16a34a'],
+                    'from-yellow-400 to-yellow-600': ['#facc15', '#ca8a04'],
+                    'from-purple-400 to-purple-600': ['#c084fc', '#9333ea'],
+                    'from-pink-400 to-pink-600': ['#f472b6', '#db2777'],
+                    'from-cyan-400 to-cyan-600': ['#22d3ee', '#0891b2'],
+                    'from-orange-400 to-orange-600': ['#fb923c', '#ea580c'],
+                    'from-blue-400 to-cyan-300': ['#60a5fa', '#67e8f9'],
+                    'from-blue-600 to-cyan-500': ['#2563eb', '#06b6d4'],
+                    'from-blue-600 to-cyan-700': ['#2563eb', '#0e7490'],
+                    'from-emerald-600 to-teal-700': ['#059669', '#0f766e'],
+                    'from-purple-600 to-pink-700': ['#9333ea', '#be185d'],
+                    'from-gray-500 to-gray-600': ['#6b7280', '#4b5563'],
+                };
+
                 const Block = ({ cellData, isDissolving, noAnim, extraClass = '', staggerDelay = 0, burst = false }) => {
                     if (!cellData) return <div className={`w-full h-full rounded-[4px] bg-white/5 border border-white/5 ${extraClass}`} />;
                     const type = typeof cellData === 'object' ? cellData.type : null;
                     let animClass = noAnim ? '' : 'animate-popIn';
                     if (isDissolving) animClass = burst ? 'animate-line-burst' : 'animate-dissolve';
-                    const style = staggerDelay > 0 ? { animationDelay: `${staggerDelay}ms` } : {};
+                    const delayStyle = staggerDelay > 0 ? { animationDelay: `${staggerDelay}ms` } : {};
                     if (type === 'filler') return (
                         <div className={`w-full h-full rounded-[4px] animate-shimmer ${animClass} ${extraClass}`}
-                            style={{ background: 'linear-gradient(135deg,#ffe066,#ffb347,#ff80bf,#a78bfa,#67e8f9,#ffe066)', backgroundSize: '300% 300%', boxShadow: 'inset 2px 2px 4px rgba(255,255,200,0.7), inset -2px -2px 5px rgba(120,60,0,0.5)', ...style }} />
+                            style={{ background: 'linear-gradient(135deg,#ffe066,#ffb347,#ff80bf,#a78bfa,#67e8f9,#ffe066)', backgroundSize: '300% 300%', boxShadow: 'inset 2px 2px 4px rgba(255,255,200,0.7), inset -2px -2px 5px rgba(120,60,0,0.5)', ...delayStyle }} />
                     );
                     if (type === 'explosive') return (
                         <div className={`w-full h-full rounded-[4px] animate-bomb-pulse ${animClass} ${extraClass}`}
-                            style={{ background: 'radial-gradient(circle at 42% 38%, #ff6a00 0%, #c0200a 45%, #1a0000 100%)', boxShadow: 'inset 1px 1px 4px rgba(255,160,0,0.6), inset -1px -1px 5px rgba(0,0,0,0.9)', ...style }} />
+                            style={{ background: 'radial-gradient(circle at 42% 38%, #ff6a00 0%, #c0200a 45%, #1a0000 100%)', boxShadow: 'inset 1px 1px 4px rgba(255,160,0,0.6), inset -1px -1px 5px rgba(0,0,0,0.9)', ...delayStyle }} />
                     );
                     const colorClass = typeof cellData === 'string' ? cellData : cellData.color;
-                    return <div className={`w-full h-full bg-gradient-to-br ${colorClass} block-texture ${animClass} relative rounded-[4px] overflow-hidden ${extraClass}`} style={style} />;
+                    const colors = COLOR_MAP[colorClass] || ['#666', '#333'];
+                    const texStyle = { '--c-from': colors[0], '--c-to': colors[1], ...delayStyle };
+                    return <div className={`w-full h-full bg-gradient-to-br ${colorClass} block-texture block-render ${animClass} relative rounded-[4px] overflow-hidden ${extraClass}`} style={texStyle} />;
                 };
 
                 const PIECE_LIBRARY = [
@@ -450,6 +504,11 @@ public class TetrisServer {
                     const [stagePieceCount, setStagePieceCount] = useState(0);
                     const [stageResult, setStageResult] = useState(null); // null|'won'|'lost'
                     const [boardShake, setBoardShake] = useState(false);
+                    const [blockTexture, setBlockTexture] = useState(() => localStorage.getItem('tetris_texture') || 'default');
+                    useEffect(() => {
+                        localStorage.setItem('tetris_texture', blockTexture);
+                        document.body.setAttribute('data-block-tex', blockTexture);
+                    }, [blockTexture]);
                     const [soloHighScore, setSoloHighScore] = useState(() => parseInt(localStorage.getItem('tetris_solo_hs') || '0'));
                     const [soloDifficulty, setSoloDifficulty] = useState(() => localStorage.getItem('tetris_solo_diff') || 'normal');
                     useEffect(() => { localStorage.setItem('tetris_solo_diff', soloDifficulty); }, [soloDifficulty]);
@@ -883,7 +942,20 @@ public class TetrisServer {
                                         </button>
                                     </div>
                                 </div>
-                                <div className="mt-4 text-[10px] text-gray-600 font-mono text-right w-full max-w-sm">{appVersion}</div>
+                                <div className="mt-3 flex gap-2 justify-center w-full max-w-sm">
+                                    {[
+                                        { key: 'default', label: '◆', title: 'Padrão' },
+                                        { key: 'candy', label: '🍭', title: 'Doce' },
+                                        { key: 'stone', label: '🪨', title: 'Pedra' },
+                                        { key: 'metal', label: '🔩', title: 'Metal' },
+                                        { key: 'glass', label: '💎', title: 'Cristal' },
+                                    ].map(t => (
+                                        <button key={t.key} title={t.title} onClick={() => setBlockTexture(t.key)}
+                                            className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm transition-all ${blockTexture === t.key ? 'bg-blue-600 text-white ring-1 ring-blue-400 scale-110' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`}
+                                        >{t.label}</button>
+                                    ))}
+                                </div>
+                                <div className="mt-2 text-[10px] text-gray-600 font-mono text-right w-full max-w-sm">{appVersion}</div>
                             </div>
                         );
                     }
@@ -1007,6 +1079,21 @@ public class TetrisServer {
                                             <div className="flex justify-between items-center mb-4"><span className="text-xs font-bold uppercase text-gray-400">Nível {gameState.level} → {gameState.level + 1}</span><span className="text-xs font-black text-blue-400">{scoreInLevel} / 1000</span></div>
                                             <div className="w-full bg-black rounded-full h-3 border border-gray-800"><div className="bg-gradient-to-r from-blue-600 to-cyan-500 h-full rounded-full" style={{ width: `${Math.min(100, scoreInLevel / 10)}%` }} /></div>
                                             </>); })()}
+                                        </div>
+                                        <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 mb-6">
+                                            <span className="text-xs font-bold uppercase text-gray-400 mb-3 block">Textura dos Blocos</span>
+                                            <div className="grid grid-cols-5 gap-2">
+                                                {[
+                                                    { key: 'default', label: '◆', title: 'Padrão' },
+                                                    { key: 'candy', label: '🍭', title: 'Doce' },
+                                                    { key: 'stone', label: '🪨', title: 'Pedra' },
+                                                    { key: 'metal', label: '🔩', title: 'Metal' },
+                                                    { key: 'glass', label: '💎', title: 'Cristal' },
+                                                ].map(t => (
+                                                    <button key={t.key} title={t.title} onClick={() => setBlockTexture(t.key)}
+                                                        className={`aspect-square rounded-xl flex items-center justify-center text-lg transition-all ${blockTexture === t.key ? 'bg-blue-600 text-white ring-2 ring-blue-400' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`}>{t.label}</button>
+                                                ))}
+                                            </div>
                                         </div>
                                         <div className="mt-auto flex flex-col gap-4">
                                             <button onClick={resetGame} className="w-full py-4 bg-red-500/10 text-red-500 rounded-xl font-bold border border-red-500/20 flex items-center justify-center gap-2"><IconRefresh /> Resetar Matriz</button>
