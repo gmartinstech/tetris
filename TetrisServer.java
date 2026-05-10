@@ -289,19 +289,37 @@ public class TetrisServer {
 
     private static void handleRoomGet(HttpExchange exchange) throws IOException {
         exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        String method = exchange.getRequestMethod();
+        if ("OPTIONS".equals(method)) {
+            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, DELETE, OPTIONS");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+            exchange.sendResponseHeaders(204, -1);
+            return;
+        }
         String path = exchange.getRequestURI().getPath();
         String slug = path.substring("/room/".length());
         if (!SLUG_RE.matcher(slug).matches()) {
             exchange.sendResponseHeaders(400, -1);
             return;
         }
-        if (!"GET".equals(exchange.getRequestMethod())) {
-            exchange.sendResponseHeaders(405, -1);
-            return;
-        }
         Room room = rooms.get(slug);
         if (room == null) {
             exchange.sendResponseHeaders(404, -1);
+            return;
+        }
+        if ("DELETE".equals(method)) {
+            // Notify any connected SSE clients that the session is over, then drop.
+            broadcastEvent(room, "session-end", "{}");
+            for (OutputStream os : room.sseClients) {
+                try { os.close(); } catch (Exception ignored) {}
+            }
+            rooms.remove(slug);
+            deleteRoomFile(slug);
+            exchange.sendResponseHeaders(204, -1);
+            return;
+        }
+        if (!"GET".equals(method)) {
+            exchange.sendResponseHeaders(405, -1);
             return;
         }
         room.touch();

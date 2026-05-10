@@ -477,6 +477,11 @@ function App() {
                         else setPartnerHover(msg);
                     } catch (e) {}
                 });
+                es.addEventListener('session-end', () => {
+                    setRoomCreateError(`Sala "${coopRoom}" foi encerrada por outro jogador`);
+                    setRoomInUrl(null);
+                    setGameState(null); setPlayerRole(null); setPartnerHover(null);
+                });
                 es.onerror = () => { es.close(); setTimeout(connectSSE, 1000); };
             };
             connectSSE();
@@ -587,6 +592,17 @@ function App() {
         } finally {
             setRoomCreating(false);
         }
+    };
+
+    const endSession = async () => {
+        if (!coopRoom) return;
+        if (!window.confirm(`Encerrar sessão "${coopRoom}"? Isso apaga a sala para todos.`)) return;
+        try {
+            await fetch(`room/${encodeURIComponent(coopRoom)}`, { method: 'DELETE' });
+        } catch (e) {}
+        setRoomInUrl(null);
+        setGameState(null); setPlayerRole(null); setPartnerHover(null);
+        setRoomCreateName(''); setRoomCreateError(''); setShareCopied(false);
     };
 
     const shareLink = () => {
@@ -1056,6 +1072,7 @@ function App() {
                     <div className="space-y-4">
                         {!gameState?.p1 ? <button onClick={() => joinGame('p1', 'Jogador 1')} className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Jogador 1</button> : <div className="p-4 bg-blue-900/20 text-blue-400 rounded-2xl text-sm font-bold border border-blue-900/50">Jogador 1 conectado</div>}
                         {!gameState?.p2 ? <button onClick={() => joinGame('p2', 'Jogador 2')} className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Jogador 2</button> : <div className="p-4 bg-purple-900/20 text-purple-400 rounded-2xl text-sm font-bold border border-purple-900/50">Jogador 2 conectado</div>}
+                        <button onClick={endSession} className="w-full py-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl font-bold border border-red-500/30 text-sm">Encerrar sessão</button>
                         <button onClick={goToMenu} className="w-full py-3 text-gray-400 hover:text-white text-sm font-bold">← Voltar ao menu</button>
                     </div>
                 </div>
