@@ -1,7 +1,15 @@
 const { useState, useEffect, useRef, useCallback } = React;
 
 const BOARD_SIZE = 10;
-const PIECE_STYLES = ['from-red-400 to-red-600', 'from-blue-400 to-blue-600', 'from-green-400 to-green-600', 'from-yellow-400 to-yellow-600', 'from-purple-400 to-purple-600', 'from-pink-400 to-pink-600', 'from-cyan-400 to-cyan-600', 'from-orange-400 to-orange-600'];
+// Harmonized jewel palette — all Tailwind 400→600 stops at matching saturation
+const PIECE_STYLES = [
+    'from-rose-400 to-rose-600',
+    'from-amber-400 to-amber-600',
+    'from-emerald-400 to-emerald-600',
+    'from-sky-400 to-sky-600',
+    'from-violet-400 to-violet-600',
+    'from-teal-400 to-teal-600',
+];
 
 // SVGs inline
 const IconTrophy = () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
@@ -17,14 +25,13 @@ const IconExitFullscreen = () => <svg xmlns="http://www.w3.org/2000/svg" width="
 const vibrate = (pattern) => { if (navigator.vibrate) try { navigator.vibrate(pattern); } catch (e) {} };
 
 const COLOR_MAP = {
-    'from-red-400 to-red-600': ['#f87171', '#dc2626'],
-    'from-blue-400 to-blue-600': ['#60a5fa', '#2563eb'],
-    'from-green-400 to-green-600': ['#4ade80', '#16a34a'],
-    'from-yellow-400 to-yellow-600': ['#facc15', '#ca8a04'],
-    'from-purple-400 to-purple-600': ['#c084fc', '#9333ea'],
-    'from-pink-400 to-pink-600': ['#f472b6', '#db2777'],
-    'from-cyan-400 to-cyan-600': ['#22d3ee', '#0891b2'],
-    'from-orange-400 to-orange-600': ['#fb923c', '#ea580c'],
+    'from-rose-400 to-rose-600':    ['#fb7185', '#e11d48'],
+    'from-amber-400 to-amber-600':  ['#fbbf24', '#d97706'],
+    'from-emerald-400 to-emerald-600': ['#34d399', '#059669'],
+    'from-sky-400 to-sky-600':      ['#38bdf8', '#0284c7'],
+    'from-violet-400 to-violet-600': ['#a78bfa', '#7c3aed'],
+    'from-teal-400 to-teal-600':    ['#2dd4bf', '#0d9488'],
+    // UI gradients (used by buttons / locked stages, not piece colors)
     'from-blue-400 to-cyan-300': ['#60a5fa', '#67e8f9'],
     'from-blue-600 to-cyan-500': ['#2563eb', '#06b6d4'],
     'from-blue-600 to-cyan-700': ['#2563eb', '#0e7490'],

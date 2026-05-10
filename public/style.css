@@ -16,65 +16,67 @@ body { overflow: hidden; touch-action: none; background-color: #030712; }
 .animate-board-shake { animation: board-shake 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
 
 /* ---- Block textures ---- */
+/* Procedural noise via SVG feTurbulence (same tech AAA games use). One source,
+   layered with gradients per material. Scales perfectly to any cell size. */
 .block-render { position: relative; }
+
 .block-render[data-tex="candy"] {
     background:
-        radial-gradient(ellipse at 28% 22%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.35) 18%, transparent 42%),
-        radial-gradient(ellipse at 75% 80%, rgba(255,255,255,0.25) 0%, transparent 40%),
-        repeating-conic-gradient(from 35deg at 50% 50%, var(--c-from) 0deg 30deg, var(--c-to) 30deg 60deg) !important;
+        radial-gradient(ellipse 65% 45% at 30% 22%, rgba(255,255,255,0.95), rgba(255,255,255,0.3) 30%, transparent 65%),
+        radial-gradient(ellipse 30% 20% at 72% 80%, rgba(255,255,255,0.45), transparent 65%),
+        radial-gradient(ellipse 100% 100% at 50% 100%, var(--c-to), var(--c-from)) !important;
     box-shadow:
-        inset 0 0 0 2px rgba(255,255,255,0.25),
-        inset 4px 4px 10px rgba(255,255,255,0.55),
-        inset -5px -6px 12px rgba(0,0,0,0.45),
-        inset 0 0 18px rgba(255,255,255,0.15) !important;
+        inset 0 0 0 1.5px rgba(255,255,255,0.4),
+        inset 3px 3px 8px rgba(255,255,255,0.5),
+        inset -4px -6px 12px rgba(0,0,0,0.35),
+        inset 0 0 18px rgba(255,255,255,0.1),
+        0 1px 3px rgba(0,0,0,0.25) !important;
 }
+
 .block-render[data-tex="stone"] {
     background:
-        radial-gradient(ellipse 18% 12% at 22% 30%, rgba(0,0,0,0.45) 0%, transparent 70%),
-        radial-gradient(ellipse 14% 22% at 68% 18%, rgba(0,0,0,0.38) 0%, transparent 65%),
-        radial-gradient(circle at 80% 62%, rgba(0,0,0,0.5) 0%, transparent 18%),
-        radial-gradient(circle at 38% 72%, rgba(0,0,0,0.42) 0%, transparent 14%),
-        radial-gradient(circle at 55% 45%, rgba(255,255,255,0.18) 0%, transparent 12%),
-        radial-gradient(circle at 18% 80%, rgba(255,255,255,0.14) 0%, transparent 10%),
-        radial-gradient(ellipse 60% 40% at 30% 25%, rgba(255,255,255,0.22) 0%, transparent 60%),
-        radial-gradient(ellipse 70% 50% at 78% 82%, rgba(0,0,0,0.35) 0%, transparent 65%),
-        repeating-conic-gradient(from 27deg at 48% 52%, rgba(255,255,255,0.05) 0deg 8deg, rgba(0,0,0,0.07) 8deg 17deg, transparent 17deg 25deg),
-        repeating-linear-gradient(118deg, transparent 0 4px, rgba(0,0,0,0.06) 4px 5px, transparent 5px 9px, rgba(255,255,255,0.05) 9px 10px),
-        linear-gradient(155deg, var(--c-from) 0%, var(--c-to) 100%) !important;
-    box-shadow: inset 2px 2px 0 rgba(255,255,255,0.22), inset 3px 3px 8px rgba(255,255,255,0.12), inset -3px -3px 8px rgba(0,0,0,0.55), inset -1px -1px 0 rgba(0,0,0,0.4) !important;
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='a'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='3' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.7 0'/></filter><rect width='180' height='180' filter='url(%23a)'/></svg>"),
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='b'><feTurbulence type='fractalNoise' baseFrequency='2.6' numOctaves='2' seed='9' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.35 0'/></filter><rect width='180' height='180' filter='url(%23b)'/></svg>"),
+        radial-gradient(ellipse at 28% 28%, rgba(255,255,255,0.22), transparent 60%),
+        radial-gradient(ellipse at 78% 78%, rgba(0,0,0,0.4), transparent 65%),
+        linear-gradient(155deg, var(--c-from), var(--c-to)) !important;
+    background-size: 100% 100% !important;
+    background-blend-mode: multiply, screen, normal, normal, normal !important;
+    box-shadow:
+        inset 1px 1px 0 rgba(255,255,255,0.3),
+        inset -1px -1px 0 rgba(0,0,0,0.45),
+        inset 3px 3px 8px rgba(255,255,255,0.1),
+        inset -3px -3px 8px rgba(0,0,0,0.55) !important;
 }
+
 .block-render[data-tex="metal"] {
     background:
-        repeating-linear-gradient(90deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 1px, transparent 1px, transparent 3px),
-        repeating-linear-gradient(90deg, rgba(0,0,0,0.10) 0px, rgba(0,0,0,0.10) 1px, transparent 1px, transparent 5px),
-        repeating-linear-gradient(90deg, rgba(255,255,255,0.04) 0px, rgba(255,255,255,0.04) 2px, transparent 2px, transparent 9px),
-        linear-gradient(180deg,
-            var(--c-from) 0%,
-            color-mix(in srgb, var(--c-from) 60%, white) 18%,
-            rgba(255,255,255,0.55) 24%,
-            var(--c-from) 32%,
-            var(--c-to) 70%,
-            color-mix(in srgb, var(--c-to) 70%, black) 100%) !important;
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='a'><feTurbulence type='turbulence' baseFrequency='0.02 1.9' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.4 0'/></filter><rect width='180' height='180' filter='url(%23a)'/></svg>"),
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='b'><feTurbulence type='turbulence' baseFrequency='0.015 2.4' numOctaves='1' seed='11' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.3 0'/></filter><rect width='180' height='180' filter='url(%23b)'/></svg>"),
+        linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 28%, rgba(0,0,0,0) 62%, rgba(0,0,0,0.4) 100%),
+        linear-gradient(180deg, var(--c-from), var(--c-to)) !important;
+    background-size: 100% 100% !important;
+    background-blend-mode: screen, multiply, normal, normal !important;
     box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.55),
-        inset 0 2px 6px rgba(255,255,255,0.25),
-        inset 0 -2px 4px rgba(0,0,0,0.5),
-        inset 0 -1px 0 rgba(0,0,0,0.6) !important;
+        inset 0 1px 0 rgba(255,255,255,0.6),
+        inset 0 -1px 0 rgba(0,0,0,0.55),
+        inset 0 2px 5px rgba(255,255,255,0.25),
+        inset 0 -2px 5px rgba(0,0,0,0.4) !important;
 }
+
 .block-render[data-tex="glass"] {
     background:
-        radial-gradient(ellipse 55% 35% at 30% 22%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.35) 35%, transparent 65%),
-        radial-gradient(ellipse 18% 12% at 68% 18%, rgba(255,255,255,0.7) 0%, transparent 70%),
-        radial-gradient(ellipse 70% 50% at 75% 90%, rgba(255,255,255,0.18) 0%, transparent 60%),
-        linear-gradient(135deg, transparent 38%, rgba(255,255,255,0.12) 50%, transparent 62%),
-        linear-gradient(45deg, transparent 42%, rgba(255,255,255,0.08) 50%, transparent 58%),
-        linear-gradient(160deg, var(--c-from) 0%, var(--c-to) 100%) !important;
+        radial-gradient(ellipse 50% 32% at 30% 18%, rgba(255,255,255,0.95), rgba(255,255,255,0.5) 30%, transparent 60%),
+        radial-gradient(ellipse 14% 8% at 65% 15%, rgba(255,255,255,0.9), transparent 80%),
+        linear-gradient(135deg, transparent 35%, rgba(255,255,255,0.2) 50%, transparent 65%),
+        radial-gradient(ellipse 80% 80% at 80% 92%, rgba(255,255,255,0.15), transparent 65%),
+        linear-gradient(160deg, var(--c-from), var(--c-to)) !important;
     box-shadow:
-        inset 0 0 0 1px rgba(255,255,255,0.25),
-        inset 2px 2px 6px rgba(255,255,255,0.45),
-        inset -3px -3px 8px rgba(0,0,0,0.3),
-        inset -1px -1px 12px rgba(255,255,255,0.15) !important;
-    border: 1px solid rgba(255,255,255,0.55) !important;
+        inset 0 0 0 1px rgba(255,255,255,0.4),
+        inset 2px 2px 6px rgba(255,255,255,0.5),
+        inset -3px -4px 8px rgba(0,0,0,0.25),
+        inset 0 0 12px rgba(255,255,255,0.18) !important;
+    border: 1px solid rgba(255,255,255,0.6) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
