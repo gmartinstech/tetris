@@ -182,28 +182,94 @@ const PIECE_LIBRARY = [
 
 const DIAGONAL_OFFSET = PIECE_LIBRARY.length - 10; // last 10 are diagonal pieces
 
-const generateProceduralPiece = (level, mods = {}) => {
+// ── Balanced bag generator (válvula de escape) ────────────────────────────
+// A piece bag re-shuffles when emptied; whenever a draw yields a "complex"
+// piece (>= COMPLEX_THRESHOLD blocks), the team owes the queue two relief
+// pieces (<= RELIEF_THRESHOLD blocks). The debt persists across bag refills
+// and across the two co-op players, since both pull from the same bag.
+//
+// Reset via `resetPieceBag()` at the start of every fresh game/board so
+// debt and ordering from a previous session don't leak.
+const COMPLEX_THRESHOLD = 5;
+const RELIEF_THRESHOLD = 2;
+const RELIEF_DEBT_AFTER_COMPLEX = 2;
+
+let _pieceBag = [];
+let _reliefDebt = 0;
+
+const resetPieceBag = () => { _pieceBag = []; _reliefDebt = 0; };
+
+const _shuffleArray = (arr) => {
+    const out = arr.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+};
+
+const _shapeToPiece = (shape) => ({
+    blocks: shape.map(([x, y]) => ({ x, y })),
+    color: PIECE_STYLES[Math.floor(Math.random() * PIECE_STYLES.length)],
+});
+
+const _modPool = (level, mods) => {
     const cap = mods.maxBlocks ?? Math.min(7, 5 + Math.floor(level / 2));
     const minB = mods.minBlocks ?? 0;
-    let pool = mods.onlyDiagonal ? PIECE_LIBRARY.slice(DIAGONAL_OFFSET) : PIECE_LIBRARY;
-    pool = pool.filter(p => p.length <= cap && p.length >= minB);
-    if (pool.length === 0) pool = PIECE_LIBRARY.filter(p => p.length <= cap);
+    const base = mods.onlyDiagonal ? PIECE_LIBRARY.slice(DIAGONAL_OFFSET) : PIECE_LIBRARY;
+    const filtered = base.filter(p => p.length <= cap && p.length >= minB);
+    return filtered.length > 0 ? filtered : PIECE_LIBRARY.filter(p => p.length <= cap);
+};
+
+// Pure random — used for board obstacle seeding. Doesn't touch bag/debt.
+const generateProceduralPiece = (level, mods = {}) => {
+    const pool = _modPool(level, mods);
     const shape = pool[Math.floor(Math.random() * pool.length)];
-    const color = PIECE_STYLES[Math.floor(Math.random() * PIECE_STYLES.length)];
-    return { blocks: shape.map(([x, y]) => ({ x, y })), color };
+    return _shapeToPiece(shape);
+};
+
+// Bag-aware draw — used for player hands so the safety valve fires.
+const drawFromPieceBag = (level, mods = {}) => {
+    const pool = _modPool(level, mods);
+
+    // Relief debt: force a small piece if the current pool has any.
+    if (_reliefDebt > 0) {
+        const relief = pool.filter(p => p.length <= RELIEF_THRESHOLD);
+        if (relief.length > 0) {
+            _reliefDebt--;
+            return _shapeToPiece(relief[Math.floor(Math.random() * relief.length)]);
+        }
+        // No relief in pool (e.g., "Complexo" stage forbids small pieces) —
+        // drop the debt rather than stall.
+        _reliefDebt = 0;
+    }
+
+    // Draw from bag, skipping items that don't fit the current mod pool.
+    let shape = null;
+    while (_pieceBag.length > 0) {
+        const candidate = _pieceBag.pop();
+        if (pool.includes(candidate)) { shape = candidate; break; }
+    }
+    if (!shape) {
+        _pieceBag = _shuffleArray(pool);
+        shape = _pieceBag.pop();
+    }
+
+    if (shape.length >= COMPLEX_THRESHOLD) _reliefDebt = RELIEF_DEBT_AFTER_COMPLEX;
+    return _shapeToPiece(shape);
 };
 
 const generateInventory = (level, mods = {}) => {
     const makeSlot = (forceType) => {
         if (forceType === 'explosive') return { blocks: { blocks: [{ x: 0, y: 0 }], type: 'explosive' } };
         if (forceType === 'filler') return { blocks: { blocks: [{ x: 0, y: 0 }], type: 'filler' } };
-        if (mods.banSpecials) return { blocks: generateProceduralPiece(level, mods) };
+        if (mods.banSpecials) return { blocks: drawFromPieceBag(level, mods) };
         const r = Math.random();
         const fillerPct = mods.fillerPct ?? 0.08;
         const explosivePct = mods.explosivePct ?? 0.07;
         if (r < fillerPct) return { blocks: { blocks: [{ x: 0, y: 0 }], type: 'filler' } };
         if (r < fillerPct + explosivePct) return { blocks: { blocks: [{ x: 0, y: 0 }], type: 'explosive' } };
-        return { blocks: generateProceduralPiece(level, mods) };
+        return { blocks: drawFromPieceBag(level, mods) };
     };
     if (mods.forceExplosives) return [makeSlot('explosive'), makeSlot(), makeSlot()];
     return [makeSlot(), makeSlot(), makeSlot()];
@@ -212,6 +278,7 @@ const generateInventory = (level, mods = {}) => {
 const getBoardSize = (board) => Math.round(Math.sqrt(board.length)) || BOARD_SIZE;
 
 const generateComplexInitialBoard = (size = BOARD_SIZE, density = 0.05) => {
+    resetPieceBag(); // fresh game — drop any inherited debt + bag ordering
     let newBoard = Array(size * size).fill(0);
     const targetCells = Math.floor(size * size * density);
     let attempts = 0;
