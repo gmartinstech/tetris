@@ -847,15 +847,59 @@ function App() {
         setStagePieceCount(c => c + 1);
     };
 
+    // Rotate the piece at inventory `index` 90° CW. Sync the new shape to the
+    // partner. Specials (single-cell explosive/filler) and 1-block pieces are
+    // skipped silently — there's nothing to rotate.
+    const rotatePieceAt = (index) => {
+        if (!gameState || !playerRole) return;
+        const player = gameState[playerRole];
+        if (!player || !player.inventory) return;
+        const slot = player.inventory[index];
+        if (!slot || !slot.blocks) return;
+        const piece = slot.blocks;
+        if (piece.type) return; // explosive/filler don't rotate
+        if (!piece.blocks || piece.blocks.length < 2) return;
+
+        // 90° CW: (x, y) -> (maxY - y, x). Then normalize so minX = minY = 0.
+        let maxY = 0;
+        for (const b of piece.blocks) if (b.y > maxY) maxY = b.y;
+        let rotated = piece.blocks.map(b => ({ x: maxY - b.y, y: b.x }));
+        let minX = Infinity, minY = Infinity;
+        for (const b of rotated) {
+            if (b.x < minX) minX = b.x;
+            if (b.y < minY) minY = b.y;
+        }
+        if (minX !== 0 || minY !== 0) {
+            rotated = rotated.map(b => ({ x: b.x - minX, y: b.y - minY }));
+        }
+
+        const newSlot = { ...slot, blocks: { ...piece, blocks: rotated } };
+        const newInventory = player.inventory.map((p, i) => i === index ? newSlot : p);
+        const newPlayer = { ...player, inventory: newInventory };
+        syncState({ ...gameState, [playerRole]: newPlayer });
+        feedback('select');
+    };
+
     const handlePointerDown = (e, index) => {
         e.preventDefault();
         if (gameState.status === 'game_over' || showDashboard) return;
-        if (!canPlacePiece(gameState.board, gameState[playerRole].inventory[index])) { feedback('invalid'); return; }
-        
+        const slot = gameState[playerRole].inventory[index];
+        // Unplaceable pieces still accept taps (so the player can rotate them
+        // out of a stuck shape) but cannot be dragged onto the board.
+        const rotateOnly = !canPlacePiece(gameState.board, slot);
+
         const target = e.currentTarget; target.setPointerCapture(e.pointerId);
         const rect = target.getBoundingClientRect();
-        setSelectedPieceIndex(index);
-        setDragData({ index, pointerId: e.pointerId, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType, boardRect: gridRef.current ? gridRef.current.getBoundingClientRect() : null });
+        setSelectedPieceIndex(rotateOnly ? null : index);
+        setDragData({
+            index, pointerId: e.pointerId,
+            offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top,
+            clientX: e.clientX, clientY: e.clientY,
+            startX: e.clientX, startY: e.clientY,
+            pointerType: e.pointerType,
+            boardRect: gridRef.current ? gridRef.current.getBoundingClientRect() : null,
+            rotateOnly,
+        });
         feedback('select');
     };
 
@@ -901,7 +945,17 @@ function App() {
 
     const handleGlobalPointerUp = (e) => {
         if (!dragData) return;
-        if (hoverCell) attemptPlacement(hoverCell.x, hoverCell.y, dragData.index);
+        if (hoverCell && !dragData.rotateOnly) {
+            attemptPlacement(hoverCell.x, hoverCell.y, dragData.index);
+        } else {
+            // No board cell reached: distinguish tap (rotate) from cancelled
+            // drag. A "tap" is a release within ~12px of the start point.
+            const dx = (dragData.clientX ?? dragData.startX) - dragData.startX;
+            const dy = (dragData.clientY ?? dragData.startY) - dragData.startY;
+            if (dx * dx + dy * dy < 144) {
+                rotatePieceAt(dragData.index);
+            }
+        }
         // Always clear selection so the mini-piece returns to its spawner slot,
         // even if the drag ended off-board or on an invalid spot.
         setSelectedPieceIndex(null);
@@ -915,7 +969,9 @@ function App() {
         const maxX = Math.max(...piece.blocks.map(p => p.x)); const maxY = Math.max(...piece.blocks.map(p => p.y));
         const gridW = maxX + 1; const gridH = maxY + 1;
         const isPlayable = gameState && canPlacePiece(gameState.board, pieceWrapper);
-        const playabilityFilter = isPlayable ? 'hover:scale-[1.04]' : 'opacity-35 grayscale pointer-events-none cursor-not-allowed';
+        // Unplayable pieces stay tappable so the player can rotate them into a
+        // shape that fits — they just can't be dragged onto the board.
+        const playabilityFilter = isPlayable ? 'hover:scale-[1.04]' : 'opacity-45 grayscale cursor-not-allowed';
         const grid = Array(gridH).fill(null).map(() => Array(gridW).fill(0));
         piece.blocks.forEach(p => grid[p.y][p.x] = 1);
         return (
