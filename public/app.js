@@ -14,6 +14,7 @@ const IconLogOut = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" heig
 const IconAlert = () => <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>;
 const IconFullscreen = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>;
 const IconExitFullscreen = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 3 3 3 3 8"/><polyline points="21 8 21 3 16 3"/><polyline points="3 16 3 21 8 21"/><polyline points="16 21 21 21 21 16"/></svg>;
+const IconStash = () => <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><polyline points="19 12 12 19 5 12"/></svg>;
 
 // Persistent across calls so AudioContext isn't recreated and gets resumed once.
 let _audioCtx = null;
@@ -359,7 +360,11 @@ const playerStuck = (player, board) =>
 const allPlayersStuck = (state) => {
     const present = ['p1', 'p2'].filter(r => state[r] && state[r].inventory);
     if (present.length === 0) return false;
-    return present.every(r => playerStuck(state[r], state.board));
+    if (!present.every(r => playerStuck(state[r], state.board))) return false;
+    // Hands are stuck — the team still has a way out if any reserve piece
+    // fits the current board, since either player can withdraw it.
+    const reserve = state.sharedReserve || [];
+    return !reserve.some(slot => slot && slot.blocks && canPlacePiece(state.board, slot));
 };
 function App() {
     const [userId] = useState(() => {
@@ -551,6 +556,7 @@ function App() {
             p1: { uid: userId, name: 'Solo', inventory: generateInventory(1, diff.modifiers) },
             p2: null, score: 0, level: 1, lines: 0, status: 'playing',
             clearingLines: { rows: [], cols: [] }, explosionArea: [],
+            sharedReserve: [null, null, null],
             modifiers: diff.modifiers, density: diff.density, boardSize: size
         });
         setPlayerRole('p1'); setStagePieceCount(0); setStageResult(null);
@@ -566,6 +572,7 @@ function App() {
             p1: { uid: userId, name: 'Solo', inventory: generateInventory(1, mods) },
             p2: null, score: 0, level: 1, lines: 0, status: 'playing',
             clearingLines: { rows: [], cols: [] }, explosionArea: [],
+            sharedReserve: [null, null, null],
             modifiers: mods, density: activeStage.density || 0, boardSize: size
         });
         setPlayerRole('p1'); setStagePieceCount(0); setStageResult(null);
@@ -703,6 +710,7 @@ function App() {
                 board: generateComplexInitialBoard(size, 0),
                 p1: null, p2: null, score: 0, level: 1, lines: 0, status: 'playing',
                 clearingLines: { rows: [], cols: [] }, explosionArea: [],
+                sharedReserve: [null, null, null],
                 modifiers: sizeMods, density: 0, boardSize: size
             };
         }
@@ -721,7 +729,8 @@ function App() {
             p1: gameState.p1 ? { ...gameState.p1, inventory: generateInventory(1, mods) } : null,
             p2: gameState.p2 ? { ...gameState.p2, inventory: generateInventory(1, mods) } : null,
             score: 0, level: 1, lines: 0, status: 'playing',
-            clearingLines: { rows: [], cols: [] }, explosionArea: []
+            clearingLines: { rows: [], cols: [] }, explosionArea: [],
+            sharedReserve: [null, null, null]
         });
         setSelectedPieceIndex(null); setShowDashboard(false); setStagePieceCount(0); setStageResult(null);
     };
@@ -847,6 +856,62 @@ function App() {
         setStagePieceCount(c => c + 1);
     };
 
+    // ── Shared reserve ────────────────────────────────────────────────────
+    // Either player can stash a complex piece (>= COMPLEX_THRESHOLD blocks)
+    // into the cooperative reserve, freeing the slot for a fresh draw. Any
+    // player can later pull a stashed piece into their own hand.
+    const RESERVE_CAPACITY = 3;
+
+    const stashToReserve = (index) => {
+        if (!gameState || !playerRole) return;
+        const player = gameState[playerRole];
+        if (!player || !player.inventory) return;
+        const slot = player.inventory[index];
+        if (!slot || !slot.blocks) return;
+        const piece = slot.blocks;
+        if (piece.type) { feedback('invalid'); return; }
+        if (!piece.blocks || piece.blocks.length < COMPLEX_THRESHOLD) {
+            feedback('invalid'); return;
+        }
+        const reserve = (gameState.sharedReserve || []).slice();
+        // Pad to capacity in case state was created before this feature.
+        while (reserve.length < RESERVE_CAPACITY) reserve.push(null);
+        const target = reserve.findIndex(s => !s);
+        if (target === -1) { feedback('invalid'); return; }
+        reserve[target] = { blocks: piece };
+        // Refill the freed hand slot from the bag so the player keeps tempo.
+        const mods = gameState.modifiers || {};
+        const newSlot = { blocks: drawFromPieceBag(gameState.level || 1, mods) };
+        const newInventory = player.inventory.map((p, i) => i === index ? newSlot : p);
+        syncState({
+            ...gameState,
+            sharedReserve: reserve,
+            [playerRole]: { ...player, inventory: newInventory },
+        });
+        feedback('select');
+    };
+
+    const withdrawFromReserve = (slotIdx) => {
+        if (!gameState || !playerRole) return;
+        const player = gameState[playerRole];
+        if (!player || !player.inventory) return;
+        const reserve = (gameState.sharedReserve || []).slice();
+        const stashed = reserve[slotIdx];
+        if (!stashed || !stashed.blocks) return;
+        // The player needs a free hand slot to receive the piece.
+        const handIdx = player.inventory.findIndex(p => !p || !p.blocks);
+        if (handIdx === -1) { feedback('invalid'); return; }
+        reserve[slotIdx] = null;
+        const newInventory = player.inventory.slice();
+        newInventory[handIdx] = stashed;
+        syncState({
+            ...gameState,
+            sharedReserve: reserve,
+            [playerRole]: { ...player, inventory: newInventory },
+        });
+        feedback('select');
+    };
+
     // Rotate the piece at inventory `index` 90° CW. Sync the new shape to the
     // partner. Specials (single-cell explosive/filler) and 1-block pieces are
     // skipped silently — there's nothing to rotate.
@@ -965,7 +1030,7 @@ function App() {
         if (mode === 'coop' && playerRole) sendHoverBroadcast({ role: playerRole, x: null, y: null });
     };
 
-    const renderMiniPiece = (pieceWrapper, isSelected, onPointerDown) => {
+    const renderMiniPiece = (pieceWrapper, isSelected, onPointerDown, onStash) => {
         if (!pieceWrapper || !pieceWrapper.blocks) return <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[4px]" style={{ background: 'rgba(0,0,0,0.25)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.55)' }} />;
         const piece = pieceWrapper.blocks;
         const maxX = Math.max(...piece.blocks.map(p => p.x)); const maxY = Math.max(...piece.blocks.map(p => p.y));
@@ -978,10 +1043,68 @@ function App() {
         piece.blocks.forEach(p => grid[p.y][p.x] = 1);
         return (
             <div onPointerDown={onPointerDown}
-                className={`w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none transition-transform duration-150 rounded-[4px] ${isSelected ? 'opacity-25 scale-95 grayscale' : playabilityFilter}`}
+                className={`relative w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none transition-transform duration-150 rounded-[4px] ${isSelected ? 'opacity-25 scale-95 grayscale' : playabilityFilter}`}
                 style={{ background: 'rgba(0,0,0,0.22)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.55), inset 0 -1px 0 rgba(120,75,40,0.10)' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gridW}, min(3.5vw, 16px))`, gridTemplateRows: `repeat(${gridH}, min(3.5vw, 16px))`, gap: '1px' }}>
                     {grid.flat().map((val, idx) => (val === 1 ? <Block key={idx} cellData={piece} /> : <div key={idx} />))}
+                </div>
+                {onStash && (
+                    <button
+                        type="button"
+                        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        onClick={(e) => { e.stopPropagation(); onStash(); }}
+                        aria-label="Reservar peça"
+                        className="absolute -top-1 -right-1 w-6 h-6 wood-panel rounded-[3px] flex items-center justify-center text-[#f0e3cc] active:translate-y-px transition-transform"
+                        style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>
+                        <IconStash />
+                    </button>
+                )}
+            </div>
+        );
+    };
+
+    // Compact slot for the shared-reserve dock. Empty slots are a sunken,
+    // unlabelled wood well; filled slots are tappable to withdraw into the
+    // local player's hand.
+    const renderReserveChip = (slot, idx) => {
+        if (!slot || !slot.blocks) {
+            return (
+                <div key={`r-empty-${idx}`} className="w-12 h-12 sm:w-14 sm:h-14 rounded-[3px]"
+                    style={{ background: 'rgba(0,0,0,0.18)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.5)' }} />
+            );
+        }
+        const piece = slot.blocks;
+        const maxX = Math.max(...piece.blocks.map(p => p.x));
+        const maxY = Math.max(...piece.blocks.map(p => p.y));
+        const gridW = maxX + 1; const gridH = maxY + 1;
+        const grid = Array(gridH).fill(null).map(() => Array(gridW).fill(0));
+        piece.blocks.forEach(p => grid[p.y][p.x] = 1);
+        const handHasSpace = gameState && playerRole && gameState[playerRole]?.inventory?.some(p => !p || !p.blocks);
+        return (
+            <button key={`r-full-${idx}`} type="button"
+                onClick={() => withdrawFromReserve(idx)}
+                aria-label="Retirar da reserva"
+                disabled={!handHasSpace}
+                className={`w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center rounded-[3px] active:translate-y-px transition-transform ${handHasSpace ? '' : 'opacity-55 cursor-not-allowed'}`}
+                style={{ background: 'rgba(0,0,0,0.22)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.55), inset 0 -1px 0 rgba(120,75,40,0.10)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gridW}, 7px)`, gridTemplateRows: `repeat(${gridH}, 7px)`, gap: '1px' }}>
+                    {grid.flat().map((val, i) => (val === 1 ? <Block key={i} cellData={piece} noAnim={true} /> : <div key={i} />))}
+                </div>
+            </button>
+        );
+    };
+
+    const renderReserveDock = () => {
+        if (!gameState) return null;
+        const reserve = (gameState.sharedReserve || []).slice();
+        while (reserve.length < RESERVE_CAPACITY) reserve.push(null);
+        const allEmpty = reserve.every(s => !s || !s.blocks);
+        return (
+            <div className="flex flex-col items-center gap-1.5 mb-1">
+                <span className={`text-[9px] uppercase tracking-[0.3em] transition-colors ${allEmpty ? 'text-[#7a614a]' : 'text-[#b59470]'}`}
+                    style={{ fontWeight: 500 }}>reserva compartilhada</span>
+                <div className="flex gap-2 wood-panel-deep px-3 py-2 rounded-md">
+                    {reserve.map((slot, idx) => renderReserveChip(slot, idx))}
                 </div>
             </div>
         );
@@ -1259,9 +1382,28 @@ function App() {
                         );
                     })()}
                     <div className="flex flex-col items-center gap-2 w-auto flex-1">
+                        {renderReserveDock()}
                         <span className="text-[10px] uppercase tracking-[0.4em] text-[#b59470]" style={{ fontWeight: 500 }}>suas peças</span>
                         <div className="flex gap-3 sm:gap-4 wood-panel-deep p-3 sm:p-3.5 rounded-md">
-                            {gameState[playerRole].inventory.map((piece, idx) => (<div key={`local-${idx}`}>{renderMiniPiece(piece, selectedPieceIndex === idx, (e) => handlePointerDown(e, idx))}</div>))}
+                            {(() => {
+                                const reserve = gameState.sharedReserve || [];
+                                const reserveFull = reserve.length >= RESERVE_CAPACITY && reserve.every(s => s && s.blocks);
+                                return gameState[playerRole].inventory.map((piece, idx) => {
+                                    const blocks = piece?.blocks;
+                                    const canStash = !!(blocks && !blocks.type && blocks.blocks
+                                        && blocks.blocks.length >= COMPLEX_THRESHOLD && !reserveFull);
+                                    return (
+                                        <div key={`local-${idx}`}>
+                                            {renderMiniPiece(
+                                                piece,
+                                                selectedPieceIndex === idx,
+                                                (e) => handlePointerDown(e, idx),
+                                                canStash ? () => stashToReserve(idx) : null,
+                                            )}
+                                        </div>
+                                    );
+                                });
+                            })()}
                         </div>
                     </div>
                     <div className="w-1/3 hidden sm:block"></div>
