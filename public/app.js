@@ -1,8 +1,8 @@
 const { useState, useEffect, useRef, useCallback } = React;
 
 const BOARD_SIZE = 10;
-// Harmonized + vibrant. Stable string keys mapped to hex pairs in COLOR_MAP.
-const PIECE_STYLES = ['coral', 'tangerine', 'lime', 'azure', 'magenta', 'cyan'];
+// Painted-wood palette. Matte gouache piece colors, low chroma, warm bias.
+const PIECE_STYLES = ['brick', 'ochre', 'sage', 'slate', 'mustard', 'plum'];
 
 // SVGs inline
 const IconTrophy = () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
@@ -62,80 +62,64 @@ const feedback = (kind) => {
 };
 
 const COLOR_MAP = {
-    coral:     ['#ff4d6d', '#d6033b'],
-    tangerine: ['#ff8c1a', '#e15700'],
-    lime:      ['#3fe85a', '#0fa830'],
-    azure:     ['#1ab8ff', '#0061d6'],
-    magenta:   ['#d040f0', '#8e0fc8'],
-    cyan:      ['#00e8c6', '#009b87'],
-    // UI gradients (used by buttons / pre-filled grayed cells, not piece colors)
-    'from-gray-500 to-gray-600': ['#6b7280', '#4b5563'],
-    // Legacy aliases — any pre-1.5.0 saved piece state still resolves to a
-    // sensible color from the new palette instead of fallback gray.
-    'from-red-400 to-red-600':       ['#ff4d6d', '#d6033b'],
-    'from-rose-400 to-rose-600':     ['#ff4d6d', '#d6033b'],
-    'from-pink-400 to-pink-600':     ['#ff4d6d', '#d6033b'],
-    'from-orange-400 to-orange-600': ['#ff8c1a', '#e15700'],
-    'from-amber-400 to-amber-600':   ['#ff8c1a', '#e15700'],
-    'from-yellow-400 to-yellow-600': ['#ff8c1a', '#e15700'],
-    'from-green-400 to-green-600':   ['#3fe85a', '#0fa830'],
-    'from-emerald-400 to-emerald-600': ['#3fe85a', '#0fa830'],
-    'from-lime-400 to-lime-600':     ['#3fe85a', '#0fa830'],
-    'from-blue-400 to-blue-600':     ['#1ab8ff', '#0061d6'],
-    'from-sky-400 to-sky-600':       ['#1ab8ff', '#0061d6'],
-    'from-purple-400 to-purple-600': ['#d040f0', '#8e0fc8'],
-    'from-violet-400 to-violet-600': ['#d040f0', '#8e0fc8'],
-    'from-cyan-400 to-cyan-600':     ['#00e8c6', '#009b87'],
-    'from-teal-400 to-teal-600':     ['#00e8c6', '#009b87'],
-};
-
-// Each color has a "natural" texture so the surface matches the gem/material
-// vibe of its hue. Used when textureMode === 'natural' (default).
-const COLOR_TEXTURES = {
-    coral:     'candy',
-    tangerine: 'glass',
-    lime:      'stone',
-    azure:     'metal',
-    magenta:   'candy',
-    cyan:      'glass',
-    // Legacy aliases mirror COLOR_MAP so natural mode picks the right texture
-    // for older saved pieces still floating in cached room state.
-    'from-red-400 to-red-600':       'candy',
-    'from-rose-400 to-rose-600':     'candy',
-    'from-pink-400 to-pink-600':     'candy',
-    'from-orange-400 to-orange-600': 'glass',
-    'from-amber-400 to-amber-600':   'glass',
-    'from-yellow-400 to-yellow-600': 'glass',
-    'from-green-400 to-green-600':   'stone',
-    'from-emerald-400 to-emerald-600': 'stone',
-    'from-lime-400 to-lime-600':     'stone',
-    'from-blue-400 to-blue-600':     'metal',
-    'from-sky-400 to-sky-600':       'metal',
-    'from-purple-400 to-purple-600': 'candy',
-    'from-violet-400 to-violet-600': 'candy',
-    'from-cyan-400 to-cyan-600':     'glass',
-    'from-teal-400 to-teal-600':     'glass',
+    brick:   ['#c0593a', '#7e3320'],
+    ochre:   ['#cf8b34', '#8c5316'],
+    sage:    ['#7c9f6b', '#3e5b34'],
+    slate:   ['#6c8ba6', '#385571'],
+    mustard: ['#d2b047', '#8a6c1e'],
+    plum:    ['#8c4769', '#4f2741'],
+    // Pre-placed (career filler) cell — driftwood grey, painted to match
+    'from-gray-500 to-gray-600': ['#7d6a55', '#4a3a2a'],
+    // Legacy aliases — older saved piece state maps to the nearest gouache hue
+    'from-red-400 to-red-600':       ['#c0593a', '#7e3320'],
+    'from-rose-400 to-rose-600':     ['#c0593a', '#7e3320'],
+    'from-pink-400 to-pink-600':     ['#8c4769', '#4f2741'],
+    'from-orange-400 to-orange-600': ['#cf8b34', '#8c5316'],
+    'from-amber-400 to-amber-600':   ['#cf8b34', '#8c5316'],
+    'from-yellow-400 to-yellow-600': ['#d2b047', '#8a6c1e'],
+    'from-green-400 to-green-600':   ['#7c9f6b', '#3e5b34'],
+    'from-emerald-400 to-emerald-600': ['#7c9f6b', '#3e5b34'],
+    'from-lime-400 to-lime-600':     ['#7c9f6b', '#3e5b34'],
+    'from-blue-400 to-blue-600':     ['#6c8ba6', '#385571'],
+    'from-sky-400 to-sky-600':       ['#6c8ba6', '#385571'],
+    'from-purple-400 to-purple-600': ['#8c4769', '#4f2741'],
+    'from-violet-400 to-violet-600': ['#8c4769', '#4f2741'],
+    'from-cyan-400 to-cyan-600':     ['#6c8ba6', '#385571'],
+    'from-teal-400 to-teal-600':     ['#7c9f6b', '#3e5b34'],
 };
 
 const Block = ({ cellData, isDissolving, noAnim, extraClass = '', staggerDelay = 0, burst = false }) => {
-    if (!cellData) return <div className={`w-full h-full rounded-[4px] bg-white/5 border border-white/5 ${extraClass}`} />;
+    if (!cellData) return <div className={`w-full h-full rounded-[3px] board-cell-empty ${extraClass}`} />;
     const type = typeof cellData === 'object' ? cellData.type : null;
     let animClass = noAnim ? '' : 'animate-popIn';
     if (isDissolving) animClass = burst ? 'animate-line-burst' : 'animate-dissolve';
     const delayStyle = staggerDelay > 0 ? { animationDelay: `${staggerDelay}ms` } : {};
-    if (type === 'filler') return (
-        <div className={`w-full h-full rounded-[4px] animate-shimmer ${animClass} ${extraClass}`}
-            style={{ background: 'linear-gradient(135deg,#ffe066,#ffb347,#ff80bf,#a78bfa,#67e8f9,#ffe066)', backgroundSize: '300% 300%', boxShadow: 'inset 2px 2px 4px rgba(255,255,200,0.7), inset -2px -2px 5px rgba(120,60,0,0.5)', ...delayStyle }} />
-    );
-    if (type === 'explosive') return (
-        <div className={`w-full h-full rounded-[4px] animate-bomb-pulse ${animClass} ${extraClass}`}
-            style={{ background: 'radial-gradient(circle at 42% 38%, #ff6a00 0%, #c0200a 45%, #1a0000 100%)', boxShadow: 'inset 1px 1px 4px rgba(255,160,0,0.6), inset -1px -1px 5px rgba(0,0,0,0.9)', ...delayStyle }} />
-    );
+    if (type === 'filler') {
+        const fillerStyle = {
+            '--c-from': '#e8c468',
+            '--c-to':   '#a07423',
+            ...delayStyle,
+        };
+        return (
+            <div className={`w-full h-full block-render relative rounded-[3px] overflow-hidden animate-shimmer ${animClass} ${extraClass}`}
+                style={fillerStyle} />
+        );
+    }
+    if (type === 'explosive') {
+        const bombStyle = {
+            '--c-from': '#b94025',
+            '--c-to':   '#3a1208',
+            ...delayStyle,
+        };
+        return (
+            <div className={`w-full h-full block-render relative rounded-[3px] overflow-hidden animate-bomb-pulse ${animClass} ${extraClass}`}
+                style={bombStyle} />
+        );
+    }
     const colorClass = typeof cellData === 'string' ? cellData : cellData.color;
-    const texture = (typeof cellData === 'object' && cellData.texture) || 'default';
-    const colors = COLOR_MAP[colorClass] || ['#666', '#333'];
-    const texStyle = { '--c-from': colors[0], '--c-to': colors[1], ...delayStyle };
-    return <div data-tex={texture} className={`w-full h-full block-render ${animClass} relative rounded-[4px] overflow-hidden ${extraClass}`} style={texStyle} />;
+    const colors = COLOR_MAP[colorClass] || ['#7d6a55', '#4a3a2a'];
+    const blockStyle = { '--c-from': colors[0], '--c-to': colors[1], ...delayStyle };
+    return <div className={`w-full h-full block-render ${animClass} relative rounded-[3px] overflow-hidden ${extraClass}`} style={blockStyle} />;
 };
 
 const PIECE_LIBRARY = [
@@ -206,16 +190,7 @@ const generateProceduralPiece = (level, mods = {}) => {
     if (pool.length === 0) pool = PIECE_LIBRARY.filter(p => p.length <= cap);
     const shape = pool[Math.floor(Math.random() * pool.length)];
     const color = PIECE_STYLES[Math.floor(Math.random() * PIECE_STYLES.length)];
-    let texture;
-    if (mods.textureMode === 'random') {
-        const textures = ['candy', 'stone', 'metal', 'glass'];
-        texture = textures[Math.floor(Math.random() * textures.length)];
-    } else if (!mods.textureMode || mods.textureMode === 'natural') {
-        texture = COLOR_TEXTURES[color] || 'default';
-    } else {
-        texture = mods.textureMode;
-    }
-    return { blocks: shape.map(([x, y]) => ({ x, y })), color, texture };
+    return { blocks: shape.map(([x, y]) => ({ x, y })), color };
 };
 
 const generateInventory = (level, mods = {}) => {
@@ -365,10 +340,6 @@ function App() {
     const [stagePieceCount, setStagePieceCount] = useState(0);
     const [stageResult, setStageResult] = useState(null); // null|'won'|'lost'
     const [boardShake, setBoardShake] = useState(false);
-    const [blockTexture, setBlockTexture] = useState(() => localStorage.getItem('tetris_texture') || 'natural');
-    useEffect(() => {
-        localStorage.setItem('tetris_texture', blockTexture);
-    }, [blockTexture]);
     const [soloHighScore, setSoloHighScore] = useState(() => parseInt(localStorage.getItem('tetris_solo_hs') || '0'));
     const [soloDifficulty, setSoloDifficulty] = useState(() => localStorage.getItem('tetris_solo_diff') || 'normal');
     useEffect(() => { localStorage.setItem('tetris_solo_diff', soloDifficulty); }, [soloDifficulty]);
@@ -510,10 +481,10 @@ function App() {
         const size = diff.boardSize || BOARD_SIZE;
         setGameState({
             board: generateComplexInitialBoard(size, diff.density),
-            p1: { uid: userId, name: 'Solo', inventory: generateInventory(1, { ...diff.modifiers, textureMode: blockTexture }) },
+            p1: { uid: userId, name: 'Solo', inventory: generateInventory(1, diff.modifiers) },
             p2: null, score: 0, level: 1, lines: 0, status: 'playing',
             clearingLines: { rows: [], cols: [] }, explosionArea: [],
-            modifiers: { ...diff.modifiers, textureMode: blockTexture }, density: diff.density, boardSize: size
+            modifiers: diff.modifiers, density: diff.density, boardSize: size
         });
         setPlayerRole('p1'); setStagePieceCount(0); setStageResult(null);
     }, [mode, gameState, userId, soloDifficulty]);
@@ -521,7 +492,7 @@ function App() {
     // Career stage init: build a fresh local state when entering a stage
     useEffect(() => {
         if (mode !== 'career-stage' || !activeStage || gameState) return;
-        const mods = { ...activeStage.modifiers, textureMode: blockTexture };
+        const mods = activeStage.modifiers;
         const size = mods.boardSize || BOARD_SIZE;
         setGameState({
             board: generateComplexInitialBoard(size, activeStage.density || 0),
@@ -665,16 +636,16 @@ function App() {
                 board: generateComplexInitialBoard(size, 0),
                 p1: null, p2: null, score: 0, level: 1, lines: 0, status: 'playing',
                 clearingLines: { rows: [], cols: [] }, explosionArea: [],
-                modifiers: { ...sizeMods, textureMode: blockTexture }, density: 0, boardSize: size
+                modifiers: sizeMods, density: 0, boardSize: size
             };
         }
-        const mods = { ...(baseState.modifiers || {}), textureMode: blockTexture };
+        const mods = baseState.modifiers || {};
         const newState = { ...baseState, [role]: { uid: userId, name: name, inventory: generateInventory(baseState.level || 1, mods) } };
         syncState(newState);
     };
 
     const resetGame = () => {
-        const mods = { ...(gameState.modifiers || {}), textureMode: blockTexture };
+        const mods = gameState.modifiers || {};
         const density = gameState.density ?? 0;
         const size = gameState.boardSize || BOARD_SIZE;
         syncState({
@@ -872,16 +843,18 @@ function App() {
     };
 
     const renderMiniPiece = (pieceWrapper, isSelected, onPointerDown) => {
-        if (!pieceWrapper || !pieceWrapper.blocks) return <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-100/5 rounded-xl border border-dashed border-gray-500/20"></div>;
+        if (!pieceWrapper || !pieceWrapper.blocks) return <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[4px]" style={{ background: 'rgba(0,0,0,0.25)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.55)' }} />;
         const piece = pieceWrapper.blocks;
         const maxX = Math.max(...piece.blocks.map(p => p.x)); const maxY = Math.max(...piece.blocks.map(p => p.y));
         const gridW = maxX + 1; const gridH = maxY + 1;
         const isPlayable = gameState && canPlacePiece(gameState.board, pieceWrapper);
-        const playabilityFilter = isPlayable ? 'hover:scale-105 shadow-md' : 'opacity-30 grayscale pointer-events-none cursor-not-allowed';
+        const playabilityFilter = isPlayable ? 'hover:scale-[1.04]' : 'opacity-35 grayscale pointer-events-none cursor-not-allowed';
         const grid = Array(gridH).fill(null).map(() => Array(gridW).fill(0));
         piece.blocks.forEach(p => grid[p.y][p.x] = 1);
         return (
-            <div onPointerDown={onPointerDown} className={`w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none transition-all duration-200 rounded-xl bg-gray-50/5 border border-white/10 ${isSelected ? 'opacity-20 scale-95 grayscale' : playabilityFilter}`}>
+            <div onPointerDown={onPointerDown}
+                className={`w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none transition-transform duration-150 rounded-[4px] ${isSelected ? 'opacity-25 scale-95 grayscale' : playabilityFilter}`}
+                style={{ background: 'rgba(0,0,0,0.22)', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.55), inset 0 -1px 0 rgba(120,75,40,0.10)' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${gridW}, min(3.5vw, 16px))`, gridTemplateRows: `repeat(${gridH}, min(3.5vw, 16px))`, gap: '1px' }}>
                     {grid.flat().map((val, idx) => (val === 1 ? <Block key={idx} cellData={piece} /> : <div key={idx} />))}
                 </div>
@@ -927,66 +900,70 @@ function App() {
 
     // --- Mode menu ---
     if (mode === 'menu') {
-        const cardCls = 'w-full py-5 px-6 rounded-2xl font-black text-left transition-transform hover:-translate-y-1 shadow-lg border';
+        const modeBtn = 'w-full text-left py-4 px-5 rounded-md wood-panel flex items-center gap-4 active:translate-y-px transition-transform';
         return (
-            <div className="flex flex-col h-screen items-center justify-center text-gray-200 p-4 font-sans bg-[#030712]">
-                <div className="bg-gray-900/60 backdrop-blur-2xl border border-gray-800 p-8 rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] max-w-sm w-full">
-                    <div className="text-blue-500 mb-4 flex justify-center drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]"><IconLayers /></div>
-                    <h1 className="text-3xl font-black mb-1 tracking-tight text-center">Tetris</h1>
-                    <p className="text-gray-400 mb-8 text-sm font-medium uppercase tracking-widest text-center">Selecione um modo</p>
-                    <div className="space-y-3">
-                        <button onClick={() => { setGameState(null); setPlayerRole(null); setMode('coop'); }} className={`${cardCls} bg-gradient-to-r from-blue-600 to-cyan-700 border-blue-500/30 text-white`}>
-                            <div className="text-lg">Co-op</div>
-                            <div className="text-xs font-medium opacity-80 mt-1">Joguem juntos em tempo real</div>
+            <div className="flex flex-col h-screen items-center justify-center p-4">
+                <div className="wood-panel p-7 rounded-md max-w-sm w-full">
+                    <div className="text-center mb-7">
+                        <h1 className="text-5xl text-[#f0e3cc] tracking-[0.18em] mb-1" style={{ fontWeight: 600, textShadow: '0 1px 0 rgba(0,0,0,0.55), 0 -1px 0 rgba(255,210,160,0.10)' }}>TETRIS</h1>
+                        <p className="text-[11px] uppercase tracking-[0.4em] text-[#b59470]">pra dois · ou um</p>
+                    </div>
+                    <div className="space-y-2.5">
+                        <button onClick={() => { setGameState(null); setPlayerRole(null); setMode('coop'); }} className={modeBtn}>
+                            <span className="w-6 h-6 block-render rounded-[3px] flex-shrink-0" style={{ '--c-from': '#c0593a', '--c-to': '#7e3320' }} />
+                            <span className="flex-1">
+                                <span className="block text-[#f0e3cc] text-base tracking-wide" style={{ fontWeight: 600 }}>Co-op</span>
+                                <span className="block text-[11px] text-[#b59470] tracking-wide">dois jogadores, em tempo real</span>
+                            </span>
                         </button>
-                        <div className={`${cardCls} bg-gradient-to-r from-emerald-600 to-teal-700 border-emerald-500/30 text-white cursor-default`}>
-                            <div className="flex items-center justify-between mb-1"><span className="text-lg">Solo</span><span className="text-xs font-bold opacity-90">Recorde {soloHighScore}</span></div>
-                            <div className="text-xs font-medium opacity-80 mb-3">Dificuldade: <span className="font-black">{SOLO_DIFFICULTIES[soloDifficulty]?.name || 'Normal'}</span></div>
-                            <div className="grid grid-cols-5 gap-1 mb-2">
+                        <div className="wood-panel rounded-md p-4">
+                            <div className="flex items-center gap-4 mb-3">
+                                <span className="w-6 h-6 block-render rounded-[3px] flex-shrink-0" style={{ '--c-from': '#7c9f6b', '--c-to': '#3e5b34' }} />
+                                <span className="flex-1">
+                                    <span className="block text-[#f0e3cc] text-base tracking-wide" style={{ fontWeight: 600 }}>Sozinho</span>
+                                    <span className="block text-[11px] text-[#b59470] tracking-wide">recorde {soloHighScore}</span>
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-5 gap-1 mb-2.5">
                                 {Object.entries(SOLO_DIFFICULTIES).map(([key, d]) => (
                                     <button key={key} onClick={() => setSoloDifficulty(key)}
-                                        className={`text-[10px] py-1.5 rounded-lg font-bold border ${soloDifficulty === key ? 'bg-white/20 border-white/40' : 'bg-black/20 border-white/10 opacity-60'}`}>{d.name}</button>
+                                        className={`text-[10px] py-1.5 rounded-[3px] tracking-wide transition-colors ${soloDifficulty === key ? 'wood-panel text-[#f0e3cc]' : 'wood-panel-deep text-[#8a6f54]'}`}
+                                        style={{ fontWeight: 500 }}>{d.name}</button>
                                 ))}
                             </div>
-                            <button onClick={() => { setGameState(null); setPlayerRole(null); setMode('solo'); }} className="w-full mt-1 py-2 bg-black/30 hover:bg-black/50 rounded-lg font-black text-sm">Jogar Solo →</button>
+                            <button onClick={() => { setGameState(null); setPlayerRole(null); setMode('solo'); }} className="w-full py-2 wood-panel-deep rounded-[3px] text-[#f0e3cc] text-sm tracking-wider active:translate-y-px transition-transform" style={{ fontWeight: 600 }}>Jogar</button>
                         </div>
-                        <button onClick={() => { setGameState(null); setPlayerRole(null); setActiveStage(null); setMode('career-map'); }} className={`${cardCls} bg-gradient-to-r from-purple-600 to-pink-700 border-purple-500/30 text-white`}>
-                            <div className="text-lg">Carreira</div>
-                            <div className="text-xs font-medium opacity-80 mt-1">20 desafios com objetivos e estrelas</div>
+                        <button onClick={() => { setGameState(null); setPlayerRole(null); setActiveStage(null); setMode('career-map'); }} className={modeBtn}>
+                            <span className="w-6 h-6 block-render rounded-[3px] flex-shrink-0" style={{ '--c-from': '#cf8b34', '--c-to': '#8c5316' }} />
+                            <span className="flex-1">
+                                <span className="block text-[#f0e3cc] text-base tracking-wide" style={{ fontWeight: 600 }}>Carreira</span>
+                                <span className="block text-[11px] text-[#b59470] tracking-wide">20 etapas, três estrelas cada</span>
+                            </span>
                         </button>
                     </div>
                 </div>
-                <div className="mt-3 flex gap-2 justify-center w-full max-w-sm">
-                    {[
-                        { key: 'natural', label: '🎨', title: 'Natural (cor → textura)' },
-                        { key: 'random', label: '🎲', title: 'Aleatório' },
-                        { key: 'default', label: '◆', title: 'Padrão' },
-                        { key: 'candy', label: '🍭', title: 'Doce' },
-                        { key: 'stone', label: '🪨', title: 'Pedra' },
-                        { key: 'metal', label: '🔩', title: 'Metal' },
-                        { key: 'glass', label: '💎', title: 'Cristal' },
-                    ].map(t => (
-                        <button key={t.key} title={t.title} onClick={() => setBlockTexture(t.key)}
-                            className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm transition-all ${blockTexture === t.key ? 'bg-blue-600 text-white ring-1 ring-blue-400 scale-110' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`}
-                        >{t.label}</button>
-                    ))}
-                </div>
-                <div className="mt-2 text-[10px] text-gray-600 font-mono text-right w-full max-w-sm">{appVersion}</div>
+                <div className="mt-3 text-[10px] text-[#7a614a] tracking-wider w-full max-w-sm flex justify-end px-1">{appVersion}</div>
             </div>
         );
     }
 
     // --- Career stage map ---
     if (mode === 'career-map') {
-        if (!careerSave) return <div className="flex h-screen items-center justify-center text-gray-400 font-sans bg-[#030712]">Carregando carreira...</div>;
+        if (!careerSave) return <div className="flex h-screen items-center justify-center text-[#b59470] tracking-wider">carregando carreira...</div>;
+        const totalStars = careerSave.totalStars || 0;
+        const maxStars = CAREER_STAGES.length * 3;
         return (
-            <div className="min-h-screen text-gray-200 p-4 sm:p-8 font-sans bg-[#030712] overflow-y-auto">
+            <div className="min-h-screen p-4 sm:p-8 overflow-y-auto">
                 <div className="max-w-3xl mx-auto">
-                    <div className="flex justify-between items-center mb-6">
-                        <button onClick={goToMenu} className="bg-gray-800/80 px-4 py-2 rounded-full border border-gray-700/50 text-sm font-bold">← Menu</button>
-                        <div className="text-yellow-400 font-black text-lg">⭐ {careerSave.totalStars || 0} / {CAREER_STAGES.length * 3}</div>
+                    <div className="flex justify-between items-center mb-7">
+                        <button onClick={goToMenu} className="wood-panel px-4 py-2 rounded-md text-[#f0e3cc] text-sm tracking-wide active:translate-y-px transition-transform" style={{ fontWeight: 500 }}>← Menu</button>
+                        <div className="flex items-center gap-2">
+                            <span className="w-3.5 h-3.5 block-render rounded-[3px]" style={{ '--c-from': '#d2b047', '--c-to': '#8a6c1e' }} />
+                            <span className="text-[#e8c468] text-base tracking-wide" style={{ fontWeight: 600 }}>{totalStars}</span>
+                            <span className="text-[#8a6f54] text-sm tracking-wide">/ {maxStars}</span>
+                        </div>
                     </div>
-                    <h1 className="text-3xl font-black mb-6">Carreira</h1>
+                    <h1 className="text-[#f0e3cc] text-2xl tracking-[0.16em] uppercase mb-6" style={{ fontWeight: 600, textShadow: '0 1px 0 rgba(0,0,0,0.5)' }}>Carreira</h1>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {CAREER_STAGES.map(stage => {
                             const data = careerSave.stages?.[stage.id];
@@ -994,14 +971,14 @@ function App() {
                             const stars = data?.stars || 0;
                             return (
                                 <button key={stage.id} disabled={!unlocked} onClick={() => startStage(stage)}
-                                    className={`p-4 rounded-2xl border text-left transition-transform ${unlocked ? 'bg-gray-900/80 border-gray-700/50 hover:-translate-y-1' : 'bg-gray-950/50 border-gray-900 opacity-40 cursor-not-allowed'}`}>
-                                    <div className="flex justify-between items-start mb-1">
-                                        <span className="text-xs font-bold text-gray-500">#{stage.id}</span>
-                                        <span className="text-xs">{Array(3).fill(0).map((_, i) => <span key={i} className={i < stars ? 'text-yellow-400' : 'text-gray-700'}>★</span>)}</span>
+                                    className={`p-4 rounded-md text-left transition-transform ${unlocked ? 'wood-panel active:translate-y-px' : 'wood-panel-deep opacity-50 cursor-not-allowed'}`}>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <span className="text-[10px] tracking-[0.2em] text-[#8a6f54]" style={{ fontWeight: 500 }}>nº{String(stage.id).padStart(2, '0')}</span>
+                                        <span className="flex gap-0.5">{Array(3).fill(0).map((_, i) => <span key={i} className={i < stars ? 'text-[#e8c468]' : 'text-[#3a2616]'} style={{ fontSize: '12px' }}>★</span>)}</span>
                                     </div>
-                                    <div className="font-black text-base mb-1">{stage.name}</div>
-                                    <div className="text-xs text-gray-400 mb-2 leading-tight">{stage.hint}</div>
-                                    <div className="text-[10px] uppercase font-bold tracking-wider text-blue-400">{stage.objective.type === 'score' ? `Pontue ${stage.objective.target}` : stage.objective.type === 'lines' ? `${stage.objective.target} linhas` : `${stage.objective.target} peças`}</div>
+                                    <div className="text-[#f0e3cc] text-base mb-1 tracking-wide" style={{ fontWeight: 600 }}>{stage.name}</div>
+                                    <div className="text-[11px] text-[#b59470] mb-2 leading-snug">{stage.hint}</div>
+                                    <div className="text-[10px] uppercase tracking-[0.18em] text-[#cf8b34]" style={{ fontWeight: 500 }}>{stage.objective.type === 'score' ? `${stage.objective.target} pts` : stage.objective.type === 'lines' ? `${stage.objective.target} linhas` : `${stage.objective.target} peças`}</div>
                                 </button>
                             );
                         })}
@@ -1014,26 +991,25 @@ function App() {
     // Co-op room landing — no room slug in URL, user creates or auto-generates
     if (mode === 'coop' && !coopRoom) {
         return (
-            <div className="flex flex-col h-screen items-center justify-center text-gray-200 p-4 font-sans bg-[#030712]">
-                <div className="bg-gray-900/60 backdrop-blur-2xl border border-gray-800 p-8 rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] max-w-sm w-full text-center">
-                    <div className="text-blue-500 mb-4 flex justify-center drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]"><IconLayers /></div>
-                    <h1 className="text-3xl font-black mb-1 tracking-tight">Criar sala</h1>
-                    <p className="text-gray-400 mb-6 text-sm font-medium uppercase tracking-widest">Compartilhe o link com um amigo</p>
+            <div className="flex flex-col h-screen items-center justify-center p-4">
+                <div className="wood-panel p-7 rounded-md max-w-sm w-full text-center">
+                    <h1 className="text-3xl text-[#f0e3cc] tracking-[0.16em] uppercase mb-1" style={{ fontWeight: 600, textShadow: '0 1px 0 rgba(0,0,0,0.5)' }}>Sala nova</h1>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-[#b59470] mb-6">passe o link pro amigo</p>
                     <div className="space-y-3">
                         <input type="text" value={roomCreateName} onChange={(e) => setRoomCreateName(e.target.value)}
-                            placeholder="nome-da-sala (opcional)"
+                            placeholder="nome (opcional)"
                             maxLength={50}
-                            className="w-full px-4 py-3 bg-gray-800/80 border border-gray-700 rounded-xl text-white text-sm font-mono focus:outline-none focus:border-blue-500" />
-                        {roomCreateError && <div className="text-xs text-red-400 font-bold">{roomCreateError}</div>}
+                            className="w-full px-4 py-3 wood-panel-deep rounded-md text-[#f0e3cc] text-sm placeholder:text-[#7a614a] focus:outline-none" />
+                        {roomCreateError && <div className="text-xs text-[#d4a06b] tracking-wide" style={{ fontWeight: 500 }}>{roomCreateError}</div>}
                         <button onClick={() => createRoom(roomCreateName.trim())} disabled={roomCreating}
-                            className="w-full py-4 bg-gradient-to-r from-blue-600 to-cyan-700 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1 disabled:opacity-50">
-                            {roomCreating ? 'Criando...' : (roomCreateName.trim() ? 'Criar com este nome' : 'Criar sala')}
+                            className="w-full py-3.5 wood-panel rounded-md text-[#f0e3cc] tracking-wide disabled:opacity-50 active:translate-y-px transition-transform" style={{ fontWeight: 600 }}>
+                            {roomCreating ? 'criando…' : (roomCreateName.trim() ? 'criar com esse nome' : 'criar sala')}
                         </button>
                         <button onClick={() => { setRoomCreateName(''); createRoom(''); }} disabled={roomCreating}
-                            className="w-full py-3 bg-gray-800/80 text-gray-300 rounded-2xl font-bold border border-gray-700 hover:bg-gray-700 disabled:opacity-50">
-                            ⚡ Gerar nome aleatório
+                            className="w-full py-3 wood-panel-deep rounded-md text-[#b59470] tracking-wide text-sm disabled:opacity-50 active:translate-y-px transition-transform" style={{ fontWeight: 500 }}>
+                            sortear nome
                         </button>
-                        <button onClick={goToMenu} className="w-full py-3 text-gray-400 hover:text-white text-sm font-bold">← Voltar ao menu</button>
+                        <button onClick={goToMenu} className="w-full py-2 text-[#8a6f54] text-sm tracking-wide hover:text-[#b59470] transition-colors" style={{ fontWeight: 500 }}>← voltar</button>
                     </div>
                 </div>
             </div>
@@ -1045,35 +1021,51 @@ function App() {
         const noPlayers = !gameState || (!gameState.p1 && !gameState.p2);
         const existingSize = gameState?.boardSize || 10;
         return (
-            <div className="flex flex-col h-screen items-center justify-center text-gray-200 p-4 font-sans bg-[#030712]">
-                <div className="bg-gray-900/60 backdrop-blur-2xl border border-gray-800 p-8 rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] max-w-sm w-full text-center">
-                    <div className="text-blue-500 mb-6 flex justify-center drop-shadow-[0_0_20px_rgba(59,130,246,0.6)]"><IconLayers /></div>
-                    <h1 className="text-3xl font-black mb-1 tracking-tight">Tetris Co-op</h1>
-                    <p className="text-gray-400 mb-3 text-sm font-medium uppercase tracking-widest">Escolha seu personagem</p>
-                    <div className="mb-4 flex items-center justify-center gap-2 text-[11px] font-mono text-blue-300">
-                        <span className="px-2 py-1 bg-blue-900/30 rounded-full border border-blue-800/50">sala: {coopRoom}</span>
-                        <button onClick={shareLink} className="px-2 py-1 bg-gray-800 text-gray-300 rounded-full border border-gray-700 font-bold text-[10px] hover:bg-gray-700">{shareCopied ? '✓ copiado' : '📋 link'}</button>
+            <div className="flex flex-col h-screen items-center justify-center p-4">
+                <div className="wood-panel p-7 rounded-md max-w-sm w-full text-center">
+                    <h1 className="text-3xl text-[#f0e3cc] tracking-[0.16em] uppercase mb-1" style={{ fontWeight: 600, textShadow: '0 1px 0 rgba(0,0,0,0.5)' }}>Co-op</h1>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-[#b59470] mb-4">escolha um lado</p>
+                    <div className="mb-5 flex items-center justify-center gap-2 text-[11px]">
+                        <span className="px-2.5 py-1 wood-panel-deep rounded-[3px] text-[#b59470] tracking-wide" style={{ fontWeight: 500 }}>sala · {coopRoom}</span>
+                        <button onClick={shareLink} className="px-2.5 py-1 wood-panel rounded-[3px] text-[#f0e3cc] tracking-wide active:translate-y-px transition-transform" style={{ fontWeight: 500 }}>{shareCopied ? 'copiado' : 'copiar link'}</button>
                     </div>
                     {noPlayers ? (
-                        <div className="mb-6">
-                            <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Tamanho do tabuleiro</div>
+                        <div className="mb-5">
+                            <div className="text-[10px] uppercase tracking-[0.3em] text-[#8a6f54] mb-2" style={{ fontWeight: 500 }}>tamanho</div>
                             <div className="grid grid-cols-2 gap-2">
                                 {[8, 10].map(s => (
                                     <button key={s} onClick={() => setCoopBoardSize(s)}
-                                        className={`py-3 rounded-xl font-black text-sm border transition-all ${coopBoardSize === s ? 'bg-blue-600 text-white border-blue-400 ring-1 ring-blue-400' : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'}`}>
-                                        {s}×{s}{s === 8 ? ' · simples' : ''}
+                                        className={`py-3 rounded-md text-sm tracking-wide transition-transform active:translate-y-px ${coopBoardSize === s ? 'wood-panel text-[#f0e3cc]' : 'wood-panel-deep text-[#8a6f54]'}`}
+                                        style={{ fontWeight: 600 }}>
+                                        {s} × {s}
                                     </button>
                                 ))}
                             </div>
                         </div>
                     ) : (
-                        <div className="mb-4 text-xs text-gray-500 font-bold uppercase tracking-widest">Sala ativa · {existingSize}×{existingSize}</div>
+                        <div className="mb-4 text-[10px] text-[#8a6f54] tracking-[0.3em] uppercase" style={{ fontWeight: 500 }}>em jogo · {existingSize} × {existingSize}</div>
                     )}
-                    <div className="space-y-4">
-                        {!gameState?.p1 ? <button onClick={() => joinGame('p1', 'Jogador 1')} className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Jogador 1</button> : <div className="p-4 bg-blue-900/20 text-blue-400 rounded-2xl text-sm font-bold border border-blue-900/50">Jogador 1 conectado</div>}
-                        {!gameState?.p2 ? <button onClick={() => joinGame('p2', 'Jogador 2')} className="w-full py-4 bg-gradient-to-r from-purple-600 to-purple-800 text-white rounded-2xl font-bold shadow-lg transition-transform hover:-translate-y-1">Entrar como Jogador 2</button> : <div className="p-4 bg-purple-900/20 text-purple-400 rounded-2xl text-sm font-bold border border-purple-900/50">Jogador 2 conectado</div>}
-                        <button onClick={endSession} className="w-full py-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl font-bold border border-red-500/30 text-sm">Encerrar sessão</button>
-                        <button onClick={goToMenu} className="w-full py-3 text-gray-400 hover:text-white text-sm font-bold">← Voltar ao menu</button>
+                    <div className="space-y-2.5">
+                        {!gameState?.p1
+                            ? <button onClick={() => joinGame('p1', 'Jogador 1')} className="w-full py-3.5 wood-panel rounded-md text-[#f0e3cc] tracking-wide active:translate-y-px transition-transform flex items-center justify-center gap-3" style={{ fontWeight: 600 }}>
+                                <span className="w-5 h-5 block-render rounded-[3px]" style={{ '--c-from': '#c0593a', '--c-to': '#7e3320' }} />
+                                Jogador 1
+                              </button>
+                            : <div className="py-3.5 wood-panel-deep rounded-md text-[#b59470] text-sm tracking-wide flex items-center justify-center gap-3" style={{ fontWeight: 500 }}>
+                                <span className="w-5 h-5 block-render rounded-[3px]" style={{ '--c-from': '#c0593a', '--c-to': '#7e3320' }} />
+                                Jogador 1 · conectado
+                              </div>}
+                        {!gameState?.p2
+                            ? <button onClick={() => joinGame('p2', 'Jogador 2')} className="w-full py-3.5 wood-panel rounded-md text-[#f0e3cc] tracking-wide active:translate-y-px transition-transform flex items-center justify-center gap-3" style={{ fontWeight: 600 }}>
+                                <span className="w-5 h-5 block-render rounded-[3px]" style={{ '--c-from': '#6c8ba6', '--c-to': '#385571' }} />
+                                Jogador 2
+                              </button>
+                            : <div className="py-3.5 wood-panel-deep rounded-md text-[#b59470] text-sm tracking-wide flex items-center justify-center gap-3" style={{ fontWeight: 500 }}>
+                                <span className="w-5 h-5 block-render rounded-[3px]" style={{ '--c-from': '#6c8ba6', '--c-to': '#385571' }} />
+                                Jogador 2 · conectado
+                              </div>}
+                        <button onClick={endSession} className="w-full py-2.5 wood-panel-deep rounded-md text-[#c08066] text-xs tracking-wide active:translate-y-px transition-transform" style={{ fontWeight: 500 }}>encerrar sessão</button>
+                        <button onClick={goToMenu} className="w-full py-2 text-[#8a6f54] text-sm tracking-wide hover:text-[#b59470] transition-colors" style={{ fontWeight: 500 }}>← voltar</button>
                     </div>
                 </div>
             </div>
@@ -1081,25 +1073,31 @@ function App() {
     }
 
     // --- Loading guards for solo / career-stage ---
-    if (!gameState) return <div className="flex h-screen items-center justify-center text-gray-400 font-sans bg-[#030712]">Carregando...</div>;
+    if (!gameState) return <div className="flex h-screen items-center justify-center text-[#b59470] tracking-wider">carregando…</div>;
 
-    if (!playerRole) return <div className="flex h-screen items-center justify-center text-gray-400 font-sans bg-[#030712]">Carregando...</div>;
+    if (!playerRole) return <div className="flex h-screen items-center justify-center text-[#b59470] tracking-wider">carregando…</div>;
 
     return (
-        <div className="fixed inset-0 text-gray-100 font-sans selection:bg-transparent overflow-hidden flex flex-col touch-none" onPointerMove={handleGlobalPointerMove} onPointerUp={handleGlobalPointerUp} onPointerLeave={handleGlobalPointerUp}>
-            {floatingTexts.map(ft => <div key={ft.id} className="fixed pointer-events-none z-[200] animate-floatUp font-black text-3xl text-yellow-400 drop-shadow-[0_5px_15px_rgba(250,204,21,0.6)]" style={{ left: ft.x, top: ft.y, transform: 'translate(-50%, -50%)' }}>{ft.text}</div>)}
-            
+        <div className="fixed inset-0 text-[#f0e3cc] selection:bg-transparent overflow-hidden flex flex-col touch-none" onPointerMove={handleGlobalPointerMove} onPointerUp={handleGlobalPointerUp} onPointerLeave={handleGlobalPointerUp}>
+            {floatingTexts.map(ft => <div key={ft.id} className="fixed pointer-events-none z-[200] animate-floatUp text-2xl text-[#e8c468] tracking-wide" style={{ left: ft.x, top: ft.y, transform: 'translate(-50%, -50%)', fontWeight: 600, textShadow: '0 2px 0 rgba(0,0,0,0.55)' }}>{ft.text}</div>)}
+
             <div className="absolute top-0 left-0 right-0 p-4 sm:p-6 flex justify-between items-start z-20 pointer-events-none">
-                <button onClick={() => setShowDashboard(true)} className="pointer-events-auto bg-gray-800/80 p-3 rounded-full text-white shadow-lg border border-gray-700/50"><IconMenu /></button>
-                <div className="flex gap-2 sm:gap-4 flex-col sm:flex-row items-end sm:items-center pointer-events-auto">
-                    <div className="bg-gray-800/80 px-4 py-2 rounded-full border border-gray-700/50 shadow-lg flex items-center gap-2 text-yellow-400"><IconTrophy /><span className="font-black text-lg text-white">{gameState.score}</span></div>
-                    <div className="bg-gray-800/80 px-4 py-2 rounded-full border border-gray-700/50 shadow-lg flex items-center gap-2 hidden sm:flex text-blue-400"><IconLayers /><span className="font-bold text-sm text-white">Nível {gameState.level}</span></div>
-                    <button onClick={toggleFullscreen} className="bg-gray-800/80 p-3 rounded-full text-white shadow-lg border border-gray-700/50">{isFullscreen ? <IconExitFullscreen /> : <IconFullscreen />}</button>
+                <button onClick={() => setShowDashboard(true)} className="pointer-events-auto wood-panel p-3 rounded-md text-[#f0e3cc] active:translate-y-px transition-transform"><IconMenu /></button>
+                <div className="flex gap-2 sm:gap-3 flex-col sm:flex-row items-end sm:items-center pointer-events-auto">
+                    <div className="wood-panel px-4 py-2 rounded-md flex items-center gap-2.5">
+                        <span className="text-[#e8c468]"><IconTrophy /></span>
+                        <span className="text-[#f0e3cc] text-base tracking-wide tabular-nums" style={{ fontWeight: 600 }}>{gameState.score}</span>
+                    </div>
+                    <div className="wood-panel px-3 py-2 rounded-md hidden sm:flex items-center gap-2 text-[#b59470]">
+                        <span className="text-[10px] uppercase tracking-[0.25em]" style={{ fontWeight: 500 }}>nv</span>
+                        <span className="text-[#f0e3cc] text-sm tabular-nums" style={{ fontWeight: 600 }}>{gameState.level}</span>
+                    </div>
+                    <button onClick={toggleFullscreen} className="wood-panel p-3 rounded-md text-[#f0e3cc] active:translate-y-px transition-transform">{isFullscreen ? <IconExitFullscreen /> : <IconFullscreen />}</button>
                 </div>
             </div>
 
             <div className="flex-1 flex flex-col items-center justify-center pt-24 pb-6 px-2 z-10 w-full max-w-4xl mx-auto h-full">
-                <div ref={gridRef} className={`grid gap-[2px] p-2 bg-gray-900/80 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] select-none touch-none border border-gray-700/60 mb-auto mt-auto ${boardShake ? 'animate-board-shake' : ''}`} style={{ gridTemplateColumns: `repeat(${gameState.boardSize || BOARD_SIZE}, minmax(0, 1fr))`, width: 'min(95vw, calc(100vh - 240px), 95vh, 620px)', aspectRatio: '1 / 1' }}>
+                <div ref={gridRef} className={`grid gap-[2px] p-2.5 board-bezel rounded-md select-none touch-none mb-auto mt-auto ${boardShake ? 'animate-board-shake' : ''}`} style={{ gridTemplateColumns: `repeat(${gameState.boardSize || BOARD_SIZE}, minmax(0, 1fr))`, width: 'min(95vw, calc(100vh - 240px), 95vh, 620px)', aspectRatio: '1 / 1' }}>
                     {gameState.board.map((cellValue, index) => {
                         const size = gameState.boardSize || BOARD_SIZE;
                         const x = index % size; const y = Math.floor(index / size);
@@ -1114,8 +1112,8 @@ function App() {
                         return <div key={index} className="relative aspect-square p-[1px]">
                             <Block cellData={cellValue !== 0 ? cellValue : null} isDissolving={isDissolving} staggerDelay={staggerDelay} burst={inClearingRow || inClearingCol} />
                             {ghosted && cellValue === 0 && (
-                                <div className="absolute inset-[1px] rounded-[4px] pointer-events-none animate-pulse"
-                                    style={{ background: `linear-gradient(135deg, ${ghostColors[0]}55, ${ghostColors[1]}55)`, border: `1.5px dashed ${ghostColors[0]}`, boxShadow: `0 0 8px ${ghostColors[0]}88` }} />
+                                <div className="absolute inset-[1px] rounded-[3px] pointer-events-none"
+                                    style={{ background: `linear-gradient(160deg, ${ghostColors[0]}44, ${ghostColors[1]}33)`, boxShadow: `inset 0 0 0 1px ${ghostColors[0]}66` }} />
                             )}
                         </div>;
                     })}
@@ -1127,15 +1125,15 @@ function App() {
                         const partnerState = gameState[partnerRole];
                         if (!partnerState) return <div className="w-1/3"></div>;
                         return (
-                            <div className="flex flex-col items-start gap-2 opacity-50 scale-75 origin-bottom-left pointer-events-none w-1/3">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{partnerState.name}</span>
+                            <div className="flex flex-col items-start gap-2 opacity-55 scale-75 origin-bottom-left pointer-events-none w-1/3">
+                                <span className="text-[10px] uppercase tracking-[0.25em] text-[#8a6f54]" style={{ fontWeight: 500 }}>{partnerState.name}</span>
                                 <div className="flex gap-2">{partnerState.inventory.map((piece, idx) => (<div key={`remote-${idx}`}>{renderMiniPiece(piece, false, () => {})}</div>))}</div>
                             </div>
                         );
                     })()}
-                    <div className="flex flex-col items-center gap-3 w-auto flex-1">
-                        <span className="text-[11px] font-black uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 drop-shadow-sm">Suas Peças</span>
-                        <div className="flex gap-3 sm:gap-5 bg-gray-900/60 p-3 sm:p-4 rounded-3xl border border-gray-700/50 shadow-xl">
+                    <div className="flex flex-col items-center gap-2 w-auto flex-1">
+                        <span className="text-[10px] uppercase tracking-[0.4em] text-[#b59470]" style={{ fontWeight: 500 }}>suas peças</span>
+                        <div className="flex gap-3 sm:gap-4 wood-panel-deep p-3 sm:p-3.5 rounded-md">
                             {gameState[playerRole].inventory.map((piece, idx) => (<div key={`local-${idx}`}>{renderMiniPiece(piece, selectedPieceIndex === idx, (e) => handlePointerDown(e, idx))}</div>))}
                         </div>
                     </div>
@@ -1146,47 +1144,33 @@ function App() {
             {renderFloatingClone()}
 
             {showDashboard && (
-                <div className="absolute inset-0 z-50 flex justify-end animate-in fade-in duration-200">
-                    <div className="absolute inset-0 bg-black/60" onClick={() => setShowDashboard(false)} />
-                    <div className="relative w-full max-w-sm bg-gray-950 border-l border-gray-800 h-full p-8 flex flex-col shadow-2xl">
-                        <button onClick={() => setShowDashboard(false)} className="absolute top-6 right-6 text-gray-400 bg-gray-900 p-2 rounded-full border border-gray-800"><IconX /></button>
-                        <h2 className="text-2xl font-black text-white mb-8 mt-2">Comando</h2>
-                        <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800 mb-6">
+                <div className="absolute inset-0 z-50 flex justify-end">
+                    <div className="absolute inset-0 bg-black/70" onClick={() => setShowDashboard(false)} />
+                    <div className="relative w-full max-w-sm wood-panel-deep h-full p-7 flex flex-col" style={{ boxShadow: '-12px 0 24px rgba(0,0,0,0.55), inset 1px 0 0 rgba(120,75,40,0.18)' }}>
+                        <button onClick={() => setShowDashboard(false)} className="absolute top-5 right-5 text-[#b59470] wood-panel p-2 rounded-md active:translate-y-px transition-transform"><IconX /></button>
+                        <h2 className="text-xl text-[#f0e3cc] mb-7 mt-1 tracking-[0.18em] uppercase" style={{ fontWeight: 600, textShadow: '0 1px 0 rgba(0,0,0,0.5)' }}>Painel</h2>
+                        <div className="wood-panel p-5 rounded-md mb-5">
                             {(() => { const scoreInLevel = gameState.score - (gameState.level - 1) * 1000; return (<>
-                            <div className="flex justify-between items-center mb-4"><span className="text-xs font-bold uppercase text-gray-400">Nível {gameState.level} → {gameState.level + 1}</span><span className="text-xs font-black text-blue-400">{scoreInLevel} / 1000</span></div>
-                            <div className="w-full bg-black rounded-full h-3 border border-gray-800"><div className="bg-gradient-to-r from-blue-600 to-cyan-500 h-full rounded-full" style={{ width: `${Math.min(100, scoreInLevel / 10)}%` }} /></div>
+                            <div className="flex justify-between items-center mb-3">
+                                <span className="text-[10px] tracking-[0.25em] uppercase text-[#b59470]" style={{ fontWeight: 500 }}>nv {gameState.level} → {gameState.level + 1}</span>
+                                <span className="text-xs text-[#e8c468] tabular-nums" style={{ fontWeight: 600 }}>{scoreInLevel} / 1000</span>
+                            </div>
+                            <div className="w-full wood-panel-deep rounded-[2px] h-2.5"><div className="h-full rounded-[2px]" style={{ width: `${Math.min(100, scoreInLevel / 10)}%`, background: 'linear-gradient(180deg,#e8c468,#a07423)', boxShadow: 'inset 0 1px 0 rgba(255,235,180,0.35), inset 0 -1px 0 rgba(60,30,0,0.4)' }} /></div>
                             </>); })()}
                         </div>
-                        <div className="bg-gray-900 p-5 rounded-2xl border border-gray-800 mb-6">
-                            <span className="text-xs font-bold uppercase text-gray-400 mb-3 block">Textura dos Blocos</span>
-                            <div className="grid grid-cols-7 gap-2">
-                                {[
-                                    { key: 'natural', label: '🎨', title: 'Natural (cor → textura)' },
-                                    { key: 'random', label: '🎲', title: 'Aleatório' },
-                                    { key: 'default', label: '◆', title: 'Padrão' },
-                                    { key: 'candy', label: '🍭', title: 'Doce' },
-                                    { key: 'stone', label: '🪨', title: 'Pedra' },
-                                    { key: 'metal', label: '🔩', title: 'Metal' },
-                                    { key: 'glass', label: '💎', title: 'Cristal' },
-                                ].map(t => (
-                                    <button key={t.key} title={t.title} onClick={() => setBlockTexture(t.key)}
-                                        className={`aspect-square rounded-xl flex items-center justify-center text-lg transition-all ${blockTexture === t.key ? 'bg-blue-600 text-white ring-2 ring-blue-400' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}`}>{t.label}</button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="mt-auto flex flex-col gap-4">
+                        <div className="mt-auto flex flex-col gap-3">
                             {mode === 'coop' && coopRoom && (
-                                <div className="bg-gray-900 p-4 rounded-2xl border border-gray-800">
-                                    <div className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2">Sala</div>
+                                <div className="wood-panel p-4 rounded-md">
+                                    <div className="text-[10px] uppercase tracking-[0.3em] text-[#8a6f54] mb-2" style={{ fontWeight: 500 }}>sala</div>
                                     <div className="flex items-center justify-between gap-2">
-                                        <span className="font-mono text-blue-300 text-sm truncate">{coopRoom}</span>
-                                        <button onClick={shareLink} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold whitespace-nowrap hover:bg-blue-500">{shareCopied ? '✓ copiado' : '📋 link'}</button>
+                                        <span className="text-[#b59470] text-sm truncate tracking-wide">{coopRoom}</span>
+                                        <button onClick={shareLink} className="px-3 py-2 wood-panel-deep rounded-[3px] text-[#f0e3cc] text-xs whitespace-nowrap active:translate-y-px transition-transform tracking-wide" style={{ fontWeight: 500 }}>{shareCopied ? 'copiado' : 'copiar link'}</button>
                                     </div>
                                 </div>
                             )}
-                            <button onClick={resetGame} className="w-full py-4 bg-red-500/10 text-red-500 rounded-xl font-bold border border-red-500/20 flex items-center justify-center gap-2"><IconRefresh /> Resetar Matriz</button>
-                            {mode === 'coop' && <button onClick={leaveGame} className="w-full py-4 text-gray-400 hover:text-white hover:bg-gray-900 rounded-xl font-bold flex items-center justify-center gap-2 border border-transparent"><IconLogOut /> Abandonar Sala</button>}
-                            <button onClick={goToMenu} className="w-full py-4 text-gray-400 hover:text-white hover:bg-gray-900 rounded-xl font-bold flex items-center justify-center gap-2 border border-transparent"><IconLogOut /> Voltar ao menu</button>
+                            <button onClick={resetGame} className="w-full py-3.5 wood-panel rounded-md text-[#c08066] tracking-wide flex items-center justify-center gap-2 active:translate-y-px transition-transform" style={{ fontWeight: 500 }}><IconRefresh /> Reiniciar tabuleiro</button>
+                            {mode === 'coop' && <button onClick={leaveGame} className="w-full py-3 text-[#8a6f54] hover:text-[#b59470] rounded-md text-sm flex items-center justify-center gap-2 tracking-wide transition-colors" style={{ fontWeight: 500 }}><IconLogOut /> Sair da sala</button>}
+                            <button onClick={goToMenu} className="w-full py-3 text-[#8a6f54] hover:text-[#b59470] rounded-md text-sm flex items-center justify-center gap-2 tracking-wide transition-colors" style={{ fontWeight: 500 }}><IconLogOut /> Voltar ao menu</button>
                         </div>
                     </div>
                 </div>
@@ -1195,14 +1179,14 @@ function App() {
             {/* Career stage HUD strip */}
             {mode === 'career-stage' && activeStage && (
                 <div className="absolute top-20 left-0 right-0 flex justify-center z-20 pointer-events-none">
-                    <div className="bg-gray-900/90 backdrop-blur px-4 py-2 rounded-full border border-purple-700/40 shadow-lg flex items-center gap-3 text-xs">
-                        <span className="font-black text-purple-300">#{activeStage.id} {activeStage.name}</span>
-                        <span className="text-gray-500">·</span>
+                    <div className="wood-panel px-4 py-2 rounded-md flex items-center gap-3 text-xs">
+                        <span className="w-2.5 h-2.5 block-render rounded-[2px]" style={{ '--c-from': '#cf8b34', '--c-to': '#8c5316' }} />
+                        <span className="text-[#f0e3cc] tracking-wide" style={{ fontWeight: 600 }}>nº{String(activeStage.id).padStart(2,'0')} · {activeStage.name}</span>
                         {(() => {
                             const obj = activeStage.objective;
                             const v = obj.type === 'score' ? gameState.score : obj.type === 'lines' ? gameState.lines : stagePieceCount;
-                            const label = obj.type === 'score' ? 'Pontos' : obj.type === 'lines' ? 'Linhas' : 'Peças';
-                            return <span className="font-bold text-white">{label} {v} / {obj.target}</span>;
+                            const label = obj.type === 'score' ? 'pts' : obj.type === 'lines' ? 'linhas' : 'peças';
+                            return <span className="text-[#b59470] tracking-wide tabular-nums" style={{ fontWeight: 500 }}>{v} / {obj.target} {label}</span>;
                         })()}
                     </div>
                 </div>
@@ -1210,50 +1194,50 @@ function App() {
 
             {/* Career stage result modal */}
             {mode === 'career-stage' && stageResult && (
-                <div className="absolute inset-0 z-[60] bg-black/90 flex items-center justify-center p-4">
-                    <div className={`border p-10 rounded-[2rem] max-w-sm w-full text-center ${stageResult === 'won' ? 'bg-gray-950 border-yellow-700/50 shadow-[0_0_80px_rgba(250,204,21,0.25)]' : 'bg-gray-950 border-red-900/50 shadow-[0_0_80px_rgba(220,38,38,0.2)]'}`}>
+                <div className="absolute inset-0 z-[60] bg-black/85 flex items-center justify-center p-4">
+                    <div className="wood-panel p-9 rounded-md max-w-sm w-full text-center">
                         {stageResult === 'won' ? (() => {
                             const stars = computeStars(activeStage, gameState, stagePieceCount);
                             return (<>
-                                <div className="text-5xl mb-4">{Array(3).fill(0).map((_, i) => <span key={i} className={i < stars ? 'text-yellow-400' : 'text-gray-700'}>★</span>)}</div>
-                                <h2 className="text-3xl font-black text-white mb-2">Vitória!</h2>
-                                <p className="text-gray-400 text-sm mb-6">{activeStage.name} completo</p>
+                                <div className="text-4xl mb-3">{Array(3).fill(0).map((_, i) => <span key={i} className={i < stars ? 'text-[#e8c468]' : 'text-[#3a2616]'}>★</span>)}</div>
+                                <h2 className="text-2xl text-[#f0e3cc] mb-1 tracking-[0.16em] uppercase" style={{ fontWeight: 600 }}>Vitória</h2>
+                                <p className="text-[#b59470] text-sm mb-6 tracking-wide">{activeStage.name} completo</p>
                             </>);
                         })() : (<>
-                            <div className="text-red-500 flex justify-center mb-4"><IconAlert /></div>
-                            <h2 className="text-3xl font-black text-white mb-2">Tente de novo</h2>
-                            <p className="text-gray-400 text-sm mb-6">Objetivo não alcançado</p>
+                            <div className="text-[#c08066] flex justify-center mb-4"><IconAlert /></div>
+                            <h2 className="text-2xl text-[#f0e3cc] mb-1 tracking-[0.16em] uppercase" style={{ fontWeight: 600 }}>Mais uma</h2>
+                            <p className="text-[#b59470] text-sm mb-6 tracking-wide">objetivo não alcançado</p>
                         </>)}
-                        <div className="bg-black/50 rounded-2xl p-4 mb-6 border border-gray-800">
-                            <p className="text-xs uppercase tracking-widest text-gray-500 font-bold mb-1">Pontuação</p>
-                            <p className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">{gameState.score}</p>
+                        <div className="wood-panel-deep rounded-md p-4 mb-6">
+                            <p className="text-[10px] uppercase tracking-[0.3em] text-[#8a6f54] mb-1" style={{ fontWeight: 500 }}>pontuação</p>
+                            <p className="text-3xl text-[#f0e3cc] tabular-nums" style={{ fontWeight: 600, textShadow: '0 1px 0 rgba(0,0,0,0.5)' }}>{gameState.score}</p>
                         </div>
                         <div className="flex flex-col gap-2">
-                            <button onClick={retryStage} className="w-full py-3 bg-white/10 text-white rounded-xl font-bold border border-white/10 flex items-center justify-center gap-2"><IconRefresh /> Repetir</button>
+                            <button onClick={retryStage} className="w-full py-3 wood-panel rounded-md text-[#f0e3cc] tracking-wide flex items-center justify-center gap-2 active:translate-y-px transition-transform" style={{ fontWeight: 500 }}><IconRefresh /> Repetir</button>
                             {stageResult === 'won' && (() => {
                                 const next = CAREER_STAGES.find(s => s.id === activeStage.id + 1);
-                                return next ? <button onClick={() => startStage(next)} className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-700 text-white rounded-xl font-bold">Próximo: {next.name} →</button> : null;
+                                return next ? <button onClick={() => startStage(next)} className="w-full py-3 wood-panel rounded-md text-[#f0e3cc] tracking-wide flex items-center justify-center gap-2 active:translate-y-px transition-transform" style={{ fontWeight: 600 }}>Próxima · {next.name}</button> : null;
                             })()}
-                            <button onClick={() => { setMode('career-map'); setGameState(null); setActiveStage(null); setStageResult(null); }} className="w-full py-3 text-gray-400 hover:text-white text-sm font-bold">← Mapa</button>
+                            <button onClick={() => { setMode('career-map'); setGameState(null); setActiveStage(null); setStageResult(null); }} className="w-full py-2 text-[#8a6f54] hover:text-[#b59470] text-sm tracking-wide transition-colors" style={{ fontWeight: 500 }}>← Mapa</button>
                         </div>
                     </div>
                 </div>
             )}
 
             {gameState.status === 'game_over' && !(mode === 'career-stage' && stageResult) && (
-                <div className="absolute inset-0 z-[60] bg-black/90 flex items-center justify-center p-4">
-                    <div className="bg-gray-950 border border-red-900/50 p-10 rounded-[2rem] shadow-[0_0_80px_rgba(220,38,38,0.2)] max-w-sm w-full text-center">
-                        <div className="text-red-500 flex justify-center mb-6"><IconAlert /></div>
-                        <h2 className="text-4xl font-black text-white mb-3">GAME OVER</h2>
-                        <p className="text-gray-400 mb-8 text-sm">Nenhuma peça encaixa na matriz.</p>
-                        <div className="bg-black/50 rounded-2xl p-6 mb-8 border border-gray-800">
-                            <p className="text-xs uppercase tracking-widest text-gray-500 font-bold mb-2">Pontuação{mode === 'solo' ? ' Solo' : mode === 'coop' ? ' Colaborativa' : ''}</p>
-                            <p className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">{gameState.score}</p>
-                            {mode === 'solo' && gameState.score >= soloHighScore && gameState.score > 0 && <p className="text-xs text-yellow-400 font-bold mt-2">NOVO RECORDE</p>}
+                <div className="absolute inset-0 z-[60] bg-black/85 flex items-center justify-center p-4">
+                    <div className="wood-panel p-9 rounded-md max-w-sm w-full text-center">
+                        <div className="text-[#c08066] flex justify-center mb-5"><IconAlert /></div>
+                        <h2 className="text-3xl text-[#f0e3cc] mb-2 tracking-[0.2em] uppercase" style={{ fontWeight: 600, textShadow: '0 1px 0 rgba(0,0,0,0.55)' }}>Fim de jogo</h2>
+                        <p className="text-[#b59470] mb-7 text-sm tracking-wide">nenhuma peça encaixa</p>
+                        <div className="wood-panel-deep rounded-md p-5 mb-7">
+                            <p className="text-[10px] uppercase tracking-[0.3em] text-[#8a6f54] mb-2" style={{ fontWeight: 500 }}>pontuação{mode === 'solo' ? ' solo' : mode === 'coop' ? ' compartilhada' : ''}</p>
+                            <p className="text-4xl text-[#f0e3cc] tabular-nums" style={{ fontWeight: 600, textShadow: '0 1px 0 rgba(0,0,0,0.55)' }}>{gameState.score}</p>
+                            {mode === 'solo' && gameState.score >= soloHighScore && gameState.score > 0 && <p className="text-[10px] text-[#e8c468] tracking-[0.3em] uppercase mt-2" style={{ fontWeight: 600 }}>novo recorde</p>}
                         </div>
                         <div className="flex flex-col gap-2">
-                            <button onClick={resetGame} className="w-full py-4 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-2"><IconRefresh /> Nova Partida</button>
-                            <button onClick={goToMenu} className="w-full py-3 text-gray-400 hover:text-white text-sm font-bold">← Voltar ao menu</button>
+                            <button onClick={resetGame} className="w-full py-3.5 wood-panel rounded-md text-[#f0e3cc] tracking-wide flex items-center justify-center gap-2 active:translate-y-px transition-transform" style={{ fontWeight: 600 }}><IconRefresh /> Nova partida</button>
+                            <button onClick={goToMenu} className="w-full py-2 text-[#8a6f54] hover:text-[#b59470] text-sm tracking-wide transition-colors" style={{ fontWeight: 500 }}>← Voltar ao menu</button>
                         </div>
                     </div>
                 </div>

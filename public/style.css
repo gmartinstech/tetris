@@ -1,92 +1,151 @@
-body { overflow: hidden; touch-action: none; background-color: #030712; }
-/* Default surface — color comes from CSS vars set inline by Block component. */
+/* Painted-wood Tetris — physical cabinet aesthetic.
+   No neon. No glass. No gradient text. Object-real, not screen-real. */
+
+body {
+    overflow: hidden;
+    touch-action: none;
+    color: #f1e7d6;
+    background-color: #2b1a0e;
+    background-image:
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='w'><feTurbulence type='turbulence' baseFrequency='0.012 0.42' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.13  0 0 0 0 0.07  0 0 0 0 0.03  0 0 0 0.55 0'/></filter><rect width='320' height='320' filter='url(%23w)'/></svg>"),
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='3.2' numOctaves='1' seed='4' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.18 0'/></filter><rect width='320' height='320' filter='url(%23g)'/></svg>"),
+        radial-gradient(ellipse 90% 110% at 50% 30%, rgba(120,70,30,0.18), transparent 70%),
+        linear-gradient(180deg, #3a2415 0%, #2a1709 100%);
+    background-size: 100% 100%, 320px 320px, 100% 100%, 100% 100%;
+    background-blend-mode: multiply, multiply, screen, normal;
+    background-attachment: fixed;
+    font-family: "Futura", "Avenir Next", Avenir, "Trebuchet MS", system-ui, sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+}
+
+/* ---- Painted block (single material) ----
+   Matte gouache: soft warm highlight at top-left, soft shadow at bottom-right,
+   slight color shift toward warm. No mirror sheen, no inset stack drama. */
 .block-render {
     position: relative;
-    background: linear-gradient(135deg, var(--c-from), var(--c-to));
-    box-shadow:
-        inset 2px 2px 5px rgba(255,255,255,0.45),
-        inset -3px -3px 8px rgba(0,0,0,0.55);
-}
-@keyframes popIn { 0% { transform: scale(0.7); opacity: 0; filter: brightness(2); } 60% { transform: scale(1.05); filter: brightness(1.2); } 100% { transform: scale(1); opacity: 1; filter: brightness(1); } }
-.animate-popIn { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
-@keyframes dissolve { 0% { transform: scale(1); filter: brightness(1); opacity: 1; border-radius: 4px; } 30% { transform: scale(1.15); filter: brightness(2) contrast(1.5); opacity: 1; box-shadow: 0 0 30px rgba(255,255,255,1); z-index: 10; } 100% { transform: scale(0.5); filter: brightness(3) blur(10px); opacity: 0; border-radius: 50%; } }
-.animate-dissolve { animation: dissolve 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
-@keyframes floatUp { 0% { transform: translateY(0) scale(0.8); opacity: 0; } 20% { transform: translateY(-10px) scale(1.2); opacity: 1; } 100% { transform: translateY(-40px) scale(1); opacity: 0; } }
-.animate-floatUp { animation: floatUp 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-@keyframes shimmer-gold { 0%,100% { filter: brightness(1.1) saturate(1.3); } 50% { filter: brightness(1.8) saturate(2) hue-rotate(15deg); } }
-.animate-shimmer { animation: shimmer-gold 1.1s ease-in-out infinite; }
-@keyframes bomb-pulse { 0%,100% { filter: brightness(0.85) saturate(1.2); } 50% { filter: brightness(1.6) saturate(2) contrast(1.3); } }
-.animate-bomb-pulse { animation: bomb-pulse 0.65s ease-in-out infinite; }
-@keyframes line-burst { 0% { transform: scale(1); filter: brightness(1); opacity: 1; } 20% { transform: scale(1.2); filter: brightness(3) contrast(2); opacity: 1; box-shadow: 0 0 40px rgba(255,255,255,0.9); } 50% { transform: scale(1.1); filter: brightness(2.5) contrast(1.8); opacity: 0.8; } 100% { transform: scale(0.3); filter: brightness(4) blur(12px); opacity: 0; border-radius: 50%; } }
-.animate-line-burst { animation: line-burst 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
-@keyframes board-shake { 0%,100% { transform: translateX(0); } 15% { transform: translateX(-3px) translateY(2px); } 30% { transform: translateX(3px) translateY(-1px); } 45% { transform: translateX(-2px) translateY(1px); } 60% { transform: translateX(2px) translateY(-2px); } 75% { transform: translateX(-1px); } }
-.animate-board-shake { animation: board-shake 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
-
-/* ---- Block textures ---- */
-/* Procedural noise via SVG feTurbulence (same tech AAA games use). One source,
-   layered with gradients per material. Scales perfectly to any cell size. */
-
-.block-render[data-tex="candy"] {
     background:
-        radial-gradient(ellipse 65% 45% at 30% 22%, rgba(255,255,255,0.95), rgba(255,255,255,0.3) 30%, transparent 65%),
-        radial-gradient(ellipse 30% 20% at 72% 80%, rgba(255,255,255,0.45), transparent 65%),
-        radial-gradient(ellipse 100% 100% at 50% 100%, var(--c-to), var(--c-from)) !important;
+        radial-gradient(ellipse 90% 70% at 30% 25%, rgba(255,240,210,0.22), transparent 60%),
+        radial-gradient(ellipse 80% 70% at 75% 80%, rgba(60,30,10,0.30), transparent 65%),
+        linear-gradient(160deg, var(--c-from), var(--c-to));
     box-shadow:
-        inset 0 0 0 1.5px rgba(255,255,255,0.4),
-        inset 3px 3px 8px rgba(255,255,255,0.5),
-        inset -4px -6px 12px rgba(0,0,0,0.35),
-        inset 0 0 18px rgba(255,255,255,0.1),
-        0 1px 3px rgba(0,0,0,0.25) !important;
+        inset 0 1px 0 rgba(255,235,200,0.30),
+        inset 0 -1px 0 rgba(40,20,8,0.35),
+        0 1px 0 rgba(0,0,0,0.35);
 }
 
-.block-render[data-tex="stone"] {
+/* Brush-edge: tiny irregularity at corners so blocks don't read as plotter-perfect */
+.block-render::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
     background:
-        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='a'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='3' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.7 0'/></filter><rect width='180' height='180' filter='url(%23a)'/></svg>"),
-        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='b'><feTurbulence type='fractalNoise' baseFrequency='2.6' numOctaves='2' seed='9' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.35 0'/></filter><rect width='180' height='180' filter='url(%23b)'/></svg>"),
-        radial-gradient(ellipse at 28% 28%, rgba(255,255,255,0.22), transparent 60%),
-        radial-gradient(ellipse at 78% 78%, rgba(0,0,0,0.4), transparent 65%),
-        linear-gradient(155deg, var(--c-from), var(--c-to)) !important;
-    background-size: 100% 100% !important;
-    background-blend-mode: multiply, screen, normal, normal, normal !important;
-    box-shadow:
-        inset 1px 1px 0 rgba(255,255,255,0.3),
-        inset -1px -1px 0 rgba(0,0,0,0.45),
-        inset 3px 3px 8px rgba(255,255,255,0.1),
-        inset -3px -3px 8px rgba(0,0,0,0.55) !important;
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><filter id='b'><feTurbulence type='fractalNoise' baseFrequency='1.6' numOctaves='1' seed='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.13 0'/></filter><rect width='40' height='40' filter='url(%23b)'/></svg>");
+    mix-blend-mode: overlay;
+    opacity: 0.7;
+    border-radius: inherit;
 }
 
-.block-render[data-tex="metal"] {
+/* ---- Wood panel: raised plank for menu cards and buttons ---- */
+.wood-panel {
     background:
-        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='a'><feTurbulence type='turbulence' baseFrequency='0.02 1.9' numOctaves='2' seed='4' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.4 0'/></filter><rect width='180' height='180' filter='url(%23a)'/></svg>"),
-        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='b'><feTurbulence type='turbulence' baseFrequency='0.015 2.4' numOctaves='1' seed='11' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.3 0'/></filter><rect width='180' height='180' filter='url(%23b)'/></svg>"),
-        linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 28%, rgba(0,0,0,0) 62%, rgba(0,0,0,0.4) 100%),
-        linear-gradient(180deg, var(--c-from), var(--c-to)) !important;
-    background-size: 100% 100% !important;
-    background-blend-mode: screen, multiply, normal, normal !important;
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280'><filter id='wp'><feTurbulence type='turbulence' baseFrequency='0.014 0.5' numOctaves='2' seed='12' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.20  0 0 0 0 0.10  0 0 0 0 0.04  0 0 0 0.40 0'/></filter><rect width='280' height='280' filter='url(%23wp)'/></svg>"),
+        linear-gradient(178deg, #5b3a20 0%, #432712 100%);
+    background-blend-mode: multiply, normal;
     box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.6),
-        inset 0 -1px 0 rgba(0,0,0,0.55),
-        inset 0 2px 5px rgba(255,255,255,0.25),
-        inset 0 -2px 5px rgba(0,0,0,0.4) !important;
+        inset 0 1px 0 rgba(255,210,160,0.18),
+        inset 0 -1px 0 rgba(0,0,0,0.45),
+        0 2px 0 rgba(0,0,0,0.40),
+        0 6px 14px rgba(0,0,0,0.35);
+    border: 1px solid rgba(20,8,2,0.55);
 }
 
-.block-render[data-tex="glass"] {
+.wood-panel-deep {
     background:
-        radial-gradient(ellipse 50% 32% at 30% 18%, rgba(255,255,255,0.95), rgba(255,255,255,0.5) 30%, transparent 60%),
-        radial-gradient(ellipse 14% 8% at 65% 15%, rgba(255,255,255,0.9), transparent 80%),
-        linear-gradient(135deg, transparent 35%, rgba(255,255,255,0.2) 50%, transparent 65%),
-        radial-gradient(ellipse 80% 80% at 80% 92%, rgba(255,255,255,0.15), transparent 65%),
-        linear-gradient(160deg, var(--c-from), var(--c-to)) !important;
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280'><filter id='wd'><feTurbulence type='turbulence' baseFrequency='0.012 0.45' numOctaves='2' seed='5' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.10  0 0 0 0 0.05  0 0 0 0 0.02  0 0 0 0.50 0'/></filter><rect width='280' height='280' filter='url(%23wd)'/></svg>"),
+        linear-gradient(180deg, #2a1808 0%, #1d0f04 100%);
+    background-blend-mode: multiply, normal;
     box-shadow:
-        inset 0 0 0 1px rgba(255,255,255,0.4),
-        inset 2px 2px 6px rgba(255,255,255,0.5),
-        inset -3px -4px 8px rgba(0,0,0,0.25),
-        inset 0 0 12px rgba(255,255,255,0.18) !important;
-    border: 1px solid rgba(255,255,255,0.6) !important;
+        inset 0 2px 4px rgba(0,0,0,0.55),
+        inset 0 -1px 0 rgba(110,70,40,0.18),
+        0 0 0 1px rgba(0,0,0,0.5);
 }
+
+/* Board bezel: recessed dark frame */
+.board-bezel {
+    background:
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280'><filter id='bb'><feTurbulence type='turbulence' baseFrequency='0.010 0.40' numOctaves='2' seed='9' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.08  0 0 0 0 0.04  0 0 0 0 0.01  0 0 0 0.55 0'/></filter><rect width='280' height='280' filter='url(%23bb)'/></svg>"),
+        linear-gradient(180deg, #1a0d04 0%, #0e0602 100%);
+    background-blend-mode: multiply, normal;
+    box-shadow:
+        inset 0 3px 6px rgba(0,0,0,0.70),
+        inset 0 -2px 0 rgba(120,75,40,0.20),
+        inset 0 0 0 1px rgba(0,0,0,0.55),
+        0 1px 0 rgba(180,120,70,0.18),
+        0 8px 22px rgba(0,0,0,0.55);
+}
+
+/* Empty board cell — recessed pocket in dark wood, not a flat tile */
+.board-cell-empty {
+    background:
+        radial-gradient(ellipse 100% 100% at 30% 25%, rgba(0,0,0,0.45), transparent 60%),
+        linear-gradient(160deg, rgba(0,0,0,0.30), rgba(0,0,0,0.10));
+    box-shadow:
+        inset 0 1px 1px rgba(0,0,0,0.55),
+        inset 0 -1px 0 rgba(120,75,40,0.10);
+}
+
+/* ---- Animations — quieter than the previous set ----
+   No spring overshoot. No board shake. No starburst. */
+
+@keyframes popIn {
+    0%   { transform: scale(0.92); opacity: 0; }
+    100% { transform: scale(1);    opacity: 1; }
+}
+.animate-popIn { animation: popIn 0.18s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+@keyframes dissolve {
+    0%   { transform: scale(1);    opacity: 1; filter: brightness(1); }
+    40%  { transform: scale(1.04); opacity: 1; filter: brightness(1.15); }
+    100% { transform: scale(0.92); opacity: 0; filter: brightness(0.9); }
+}
+.animate-dissolve   { animation: dissolve 0.40s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.animate-line-burst { animation: dissolve 0.40s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+@keyframes floatUp {
+    0%   { transform: translateY(0)     scale(0.9); opacity: 0; }
+    20%  { transform: translateY(-8px)  scale(1);   opacity: 1; }
+    100% { transform: translateY(-34px) scale(1);   opacity: 0; }
+}
+.animate-floatUp { animation: floatUp 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* Filler: warm shimmer, not rainbow neon */
+@keyframes shimmer-warm {
+    0%, 100% { filter: brightness(1)    saturate(1); }
+    50%      { filter: brightness(1.18) saturate(1.15); }
+}
+.animate-shimmer { animation: shimmer-warm 1.6s ease-in-out infinite; }
+
+/* Explosive: slow ember pulse */
+@keyframes bomb-pulse {
+    0%, 100% { filter: brightness(0.95); }
+    50%      { filter: brightness(1.18); }
+}
+.animate-bomb-pulse { animation: bomb-pulse 1.1s ease-in-out infinite; }
+
+/* Board shake retained but tamed */
+@keyframes board-shake {
+    0%, 100% { transform: translateX(0); }
+    30%      { transform: translateX(-2px); }
+    60%      { transform: translateX(2px); }
+    80%      { transform: translateX(-1px); }
+}
+.animate-board-shake { animation: board-shake 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
 
 @media (prefers-reduced-motion: reduce) {
-    .animate-popIn, .animate-dissolve, .animate-floatUp, .animate-shimmer, .animate-bomb-pulse, .animate-line-burst, .animate-board-shake {
+    .animate-popIn, .animate-dissolve, .animate-floatUp, .animate-shimmer,
+    .animate-bomb-pulse, .animate-line-burst, .animate-board-shake {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
