@@ -906,6 +906,13 @@ function App() {
     const handleGlobalPointerMove = (e) => {
         if (!dragData) return;
         let newDragData = { ...dragData, clientX: e.clientX, clientY: e.clientY };
+        // Latch once the pointer moves past the tap threshold so a brief return
+        // to the start point doesn't make the floating clone flicker.
+        if (!newDragData.isDragging) {
+            const dx = e.clientX - dragData.startX;
+            const dy = e.clientY - dragData.startY;
+            if (dx * dx + dy * dy >= 144) newDragData.isDragging = true;
+        }
         if (gridRef.current && gameState) {
             const rect = gridRef.current.getBoundingClientRect();
             const size = gameState.boardSize || BOARD_SIZE;
@@ -945,16 +952,11 @@ function App() {
 
     const handleGlobalPointerUp = (e) => {
         if (!dragData) return;
-        if (hoverCell && !dragData.rotateOnly) {
+        if (hoverCell && !dragData.rotateOnly && dragData.isDragging) {
             attemptPlacement(hoverCell.x, hoverCell.y, dragData.index);
-        } else {
-            // No board cell reached: distinguish tap (rotate) from cancelled
-            // drag. A "tap" is a release within ~12px of the start point.
-            const dx = (dragData.clientX ?? dragData.startX) - dragData.startX;
-            const dy = (dragData.clientY ?? dragData.startY) - dragData.startY;
-            if (dx * dx + dy * dy < 144) {
-                rotatePieceAt(dragData.index);
-            }
+        } else if (!dragData.isDragging) {
+            // Never crossed the tap threshold — treat as a tap and rotate.
+            rotatePieceAt(dragData.index);
         }
         // Always clear selection so the mini-piece returns to its spawner slot,
         // even if the drag ended off-board or on an invalid spot.
@@ -986,7 +988,9 @@ function App() {
     };
 
     const renderFloatingClone = () => {
-        if (!dragData || !playerRole || !gameState) return null;
+        // Only show the hovering piece preview once the user has actually
+        // slid past the tap threshold. A pure tap never renders this clone.
+        if (!dragData || !dragData.isDragging || !playerRole || !gameState) return null;
         const pieceWrapper = gameState[playerRole].inventory[dragData.index];
         if (!pieceWrapper || !pieceWrapper.blocks) return null;
         const piece = pieceWrapper.blocks;
